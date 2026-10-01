@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { authenticator } from 'otplib';
 import { config } from '../common/config.js';
 import { Db } from '../common/db.js';
+import { clientIp } from '../common/ip.js';
 import { AuthUser, CurrentUser, Public } from '../common/auth.js';
 import { ChangePasswordDto, LoginDto, RegisterDto } from '../common/dto.js';
 
@@ -85,7 +86,7 @@ export class AuthService {
 export class AuthController {
   constructor(private s: AuthService) {}
   @Public() @Post('register') register(@Body() d: RegisterDto) { return this.s.register(d); }
-  @Public() @Post('login') login(@Body() d: LoginDto, @Req() req: any) { return this.s.login(d, req.ip, req.headers['user-agent']); }
+  @Public() @Post('login') login(@Body() d: LoginDto, @Req() req: any) { return this.s.login(d, clientIp(req), req.headers['user-agent']); }
   @Post('refresh') refresh(@CurrentUser() u: AuthUser) { return this.s.refresh(u); }
   @Get('activity') activity(@CurrentUser() u: AuthUser) { return this.s.activity(u); }
   @Post('password') password(@CurrentUser() u: AuthUser, @Body() d: ChangePasswordDto) { return this.s.changePassword(u, d); }
