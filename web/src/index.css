@@ -12,9 +12,10 @@
   --c-info: #1d5fbf; --c-info-soft: #e0ecfc;
   --shadow-card: 0 1px 2px rgb(15 27 45 / .05), 0 2px 8px rgb(15 27 45 / .04);
   --shadow-pop: 0 12px 40px rgb(15 27 45 / .18);
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --c-bg: #0a1017; --c-surface: #111a24; --c-surface-2: #16212d; --c-line: #213040; --c-line-strong: #2f4257;
     --c-ink: #e7edf4; --c-muted: #93a3b5;
     --c-brand: #3dbf9a; --c-brand-hover: #5fd0af; --c-brand-soft: #0f2f27; --c-on-brand: #062019;
@@ -24,7 +25,20 @@
     --c-danger: #f87171; --c-danger-soft: #3a1514;
     --c-info: #7ab2ff; --c-info-soft: #12274a;
     --shadow-card: 0 1px 2px rgb(0 0 0 / .4); --shadow-pop: 0 12px 40px rgb(0 0 0 / .6);
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --c-bg: #0a1017; --c-surface: #111a24; --c-surface-2: #16212d; --c-line: #213040; --c-line-strong: #2f4257;
+    --c-ink: #e7edf4; --c-muted: #93a3b5;
+    --c-brand: #3dbf9a; --c-brand-hover: #5fd0af; --c-brand-soft: #0f2f27; --c-on-brand: #062019;
+    --c-accent: #e0a64a;
+    --c-success: #4ade80; --c-success-soft: #0f2d1b;
+    --c-warning: #fbbf24; --c-warning-soft: #33260a;
+    --c-danger: #f87171; --c-danger-soft: #3a1514;
+    --c-info: #7ab2ff; --c-info-soft: #12274a;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / .4); --shadow-pop: 0 12px 40px rgb(0 0 0 / .6);
+  color-scheme: dark;
 }
 @theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

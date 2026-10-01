@@ -17,7 +17,8 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.use(requestLogger);
-  app.use(helmet());
+  // Defaults plus blob: so authenticated document previews (images / PDFs fetched with the bearer token) can render.
+  app.use(helmet({ contentSecurityPolicy: { directives: { ...helmet.contentSecurityPolicy.getDefaultDirectives(), 'img-src': ["'self'", 'data:', 'blob:'], 'frame-src': ["'self'", 'blob:'] } } }));
   app.useBodyParser('json', { limit: '8mb' }); // KYC documents arrive base64-encoded (5MB file ≈ 6.7MB)
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors({ origin: cfg.corsOrigins });
