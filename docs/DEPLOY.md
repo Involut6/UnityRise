@@ -49,6 +49,7 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | `require() of ES Module … not supported` | You are deploying an older commit. The API is compiled as native ES modules (Nest 12 is ESM-only) and is loaded with `import()`, which works in Vercel's runtime. Deploy a branch that includes this fix |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
 | `relation "…" does not exist`, or health says the tables are missing | Migrations not applied to **this** database (the one in the Vercel `DATABASE_URL`). Run `npm run migrate` and `npm run seed` with that same connection string |
+| Login returns a plain 500 and `/api/health` is fine → temporarily add env var `DEBUG_ERRORS=true`, redeploy, retry: the 500 body then includes `detail` (error name, code and message). **Remove the variable afterwards.** |
 | Login returns a plain 500 (`Internal server error` + `requestId`) | Usually the database. Open `/api/health` for the reason; the exact error is in Vercel → Deployments → Functions → Logs (search the `requestId`) |
 | Browser: CORS error + **500** on the `OPTIONS` (preflight) request | The API failed to start because of a bad environment variable (for example `CORS_ORIGIN=*`, a `JWT_SECRET` under 32 characters, or a missing `DATABASE_URL`). Open `/api/health` to read the message. Never use `*` for `CORS_ORIGIN` |
 | Browser: CORS error (preflight is 204 or 200) | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |

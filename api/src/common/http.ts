@@ -31,6 +31,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
     log.error(JSON.stringify({ requestId: req.id, error: e instanceof Error ? e.stack : String(e) }));
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ statusCode: 500, message: 'Internal server error', requestId: req.id });
+    // TEMPORARY DIAGNOSTICS: with DEBUG_ERRORS=true the response also carries the error name/code/message (no stack).
+    // Turn it on only while debugging a deployment and remove it afterwards.
+    const detail = process.env.DEBUG_ERRORS === 'true' && e instanceof Error
+      ? { name: e.name, code: (e as { code?: unknown }).code, message: e.message.slice(0, 300) } : undefined;
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ statusCode: 500, message: 'Internal server error', requestId: req.id, ...(detail && { detail }) });
   }
 }
