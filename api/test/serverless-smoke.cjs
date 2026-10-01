@@ -1,8 +1,8 @@
 // Exercises the serverless handler through a plain Node http server (no Vercel CLI needed):
-//   node --env-file=.env test/serverless-smoke.js   (after `npm run build`; needs PAYSTACK_WEBHOOK_SECRET set)
+//   node --env-file=.env test/serverless-smoke.cjs   (after `npm run build`; needs PAYSTACK_WEBHOOK_SECRET set)
 const http = require('http'); const { createHmac } = require('crypto');
-const handler = require('../dist/serverless').default;
-const srv = http.createServer((req, res) => handler(req, res));
+let handler; const load = async () => (handler ??= (await import('../dist/serverless.js')).default);
+const srv = http.createServer(async (req, res) => (await load())(req, res));
 const secret = process.env.PAYSTACK_WEBHOOK_SECRET || 'whsec_test_123';
 const call = (port, method, path, body, headers = {}) => new Promise((resolve, reject) => {
   const data = body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body));

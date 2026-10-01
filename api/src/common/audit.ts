@@ -1,6 +1,6 @@
 import { Logger, CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { tap } from 'rxjs';
-import { Db } from './db';
+import { Db } from './db.js';
 
 /** Audit trail: every successful state-changing request is recorded with actor, route and sanitised body. */
 @Injectable()

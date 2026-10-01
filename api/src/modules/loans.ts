@@ -1,9 +1,9 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Query, StreamableFile, Res } from '@nestjs/common';
-import { MAX_FILE, sniffFile } from '../common/files';
-import { Db, Q } from '../common/db';
-import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
-import { ConsentDto, KycDocDto, LoanApplyDto, ReviewDto } from '../common/dto';
-import { commitment, money, notify, postTxn, savingsBalance } from '../common/ledger';
+import { MAX_FILE, sniffFile } from '../common/files.js';
+import { Db, Q } from '../common/db.js';
+import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth.js';
+import { ConsentDto, KycDocDto, LoanApplyDto, ReviewDto } from '../common/dto.js';
+import { commitment, money, notify, postTxn, savingsBalance } from '../common/ledger.js';
 
 const PENALTY_RATE = 0.05;          // one-time late-payment penalty: 5% of the overdue instalment (not interest)
 

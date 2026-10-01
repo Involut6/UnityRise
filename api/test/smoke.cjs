@@ -1,4 +1,4 @@
-// End-to-end smoke test: node test/smoke.js  (API must be running; needs ADMIN_EMAIL/ADMIN_PASSWORD)
+// End-to-end smoke test: node test/smoke.cjs  (API must be running; needs ADMIN_EMAIL/ADMIN_PASSWORD)
 const B=process.env.API||'http://localhost:3000/api';
 const call=async(m,p,t,b)=>{const r=await fetch(B+p,{method:m,headers:{'content-type':'application/json',...(t&&{authorization:'Bearer '+t})},body:b&&JSON.stringify(b)});const x=await r.text();let j;try{j=JSON.parse(x)}catch{j=x}return{s:r.status,j}};
 const ok=(n,c,x)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(x)));if(!c)process.exitCode=1};

@@ -5,10 +5,11 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { fileURLToPath } from 'url';
 import helmet from 'helmet';
-import { AppModule } from './app.module';
-import { config } from './common/config';
-import { AllExceptionsFilter, requestLogger } from './common/http';
+import { AppModule } from './app.module.js';
+import { config } from './common/config.js';
+import { AllExceptionsFilter, requestLogger } from './common/http.js';
 
 /** Builds the configured Nest app. Shared by the long-running server (main.ts) and the serverless handler. */
 export async function createApp(opts: { serveWeb: boolean }) {
@@ -25,7 +26,7 @@ export async function createApp(opts: { serveWeb: boolean }) {
   app.enableCors({ origin: cfg.corsOrigins });
   if (opts.serveWeb) {
     // Serve the built web app (../web/dist) from the same origin when it exists.
-    const web = join(__dirname, '..', '..', 'web', 'dist');
+    const web = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'web', 'dist');
     if (existsSync(web)) {
       app.useStaticAssets(web);
       app.use((req: Request, res: Response, next: NextFunction) => (req.method === 'GET' && !req.path.startsWith('/api') ? res.sendFile(join(web, 'index.html')) : next()));
