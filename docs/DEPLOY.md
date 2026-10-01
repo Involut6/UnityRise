@@ -44,6 +44,7 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 |---|---|
 | 404 on every URL | Root Directory is not `api`, or `vercel.json` was not picked up |
 | `No entrypoint found which imports nestjs` | Vercel auto-detected NestJS. `api/vercel.json` sets `"framework": null` to prevent it; also set Settings → Build & Development → Framework Preset to **Other** |
+| `No Output Directory named "public" found` | The API is functions-only, but Vercel still wants a static folder. `api/vercel.json` sets `outputDirectory: "public"` and `api/public/index.html` exists; make sure both are deployed |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
 | `relation "…" does not exist` | Migrations not applied to this database |
 | Browser: CORS error | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |

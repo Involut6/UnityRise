@@ -3,6 +3,7 @@
   "framework": null,
   "buildCommand": "npm run build",
   "installCommand": "npm install --include=dev",
+  "outputDirectory": "public",
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
