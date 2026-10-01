@@ -1,7 +1,10 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Query, StreamableFile, Res } from '@nestjs/common';
+import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
 import { Db, Q } from '../common/db';
 import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
-import { ConsentDto, LoanApplyDto, ReviewDto } from '../common/dto';
+import { ConsentDto, KycDocDto, LoanApplyDto, ReviewDto } from '../common/dto';
 import { money, notify, postTxn, savingsBalance } from '../common/ledger';
 
 const REQUIRED_APPROVALS = 2;       // multi-level authorisation: two distinct staff approvals
@@ -53,6 +56,42 @@ export class LoansService {
       return loan;
     });
   }
+  async eligibility(u: AuthUser, code: string) {
+    if (!u.memberId) throw new ForbiddenException();
+    const [p] = await this.db.q('select * from loan_products where code=$1', [code]);
+    if (!p) throw new NotFoundException();
+    const bal = await savingsBalance(this.db.q, u.memberId);
+    const [open] = await this.db.q("select count(*) n from loans where member_id=$1 and status in ('guarantors_pending','under_review','approved','active','defaulted')", [u.memberId]);
+    return { savings: bal, maxAmount: money(bal * Number(p.max_multiple_of_savings)), maxTenor: p.max_tenor_months, annualRatePct: Number(p.annual_rate_pct), hasOpenLoan: Number(open.n) > 0 };
+  }
+  async addDocument(u: AuthUser, id: string, d: KycDocDto) {
+    const l = await this.db.one('select id from loans where id=$1 and member_id=$2', [id, u.memberId]);
+    if (!l) throw new NotFoundException();
+    const buf = Buffer.from(d.contentBase64, 'base64');
+    if (!buf.length || buf.length > 5 * 1024 * 1024) throw new BadRequestException('File must be 1B–5MB');
+    const dir = join(process.env.UPLOAD_DIR ?? 'uploads', 'loans', id); mkdirSync(dir, { recursive: true });
+    const key = join(dir, `${randomUUID()}.bin`); writeFileSync(key, buf);
+    await this.db.q('insert into loan_documents(loan_id,filename,storage_key) values($1,$2,$3)', [id, d.filename.slice(0, 200), key]);
+    return { uploaded: d.filename };
+  }
+  async detail(id: string) {
+    const [l] = await this.db.q(`select l.*,m.first_name,m.last_name,m.membership_id,m.id member_pk from loans l join members m on m.id=l.member_id where l.id=$1`, [id]);
+    if (!l) throw new NotFoundException();
+    return {
+      ...l,
+      savings: await savingsBalance(this.db.q, l.member_pk),
+      guarantors: await this.db.q('select m.first_name,m.last_name,m.membership_id,g.consent from loan_guarantors g join members m on m.id=g.member_id where g.loan_id=$1', [id]),
+      approvalsLog: await this.db.q('select u.email,a.decision,a.note,a.created_at from loan_approvals a join users u on u.id=a.approver_id where a.loan_id=$1 order by a.created_at', [id]),
+      documents: await this.db.q('select id,filename,created_at from loan_documents where loan_id=$1', [id]),
+      schedule: await this.db.q('select installment_no,due_date,principal_due,interest_due,penalty,paid from loan_schedule where loan_id=$1 order by installment_no', [id]),
+    };
+  }
+  async file(id: string, docId: string) {
+    const d = await this.db.one('select filename,storage_key from loan_documents where id=$1 and loan_id=$2', [docId, id]);
+    if (!d || !existsSync(d.storage_key)) throw new NotFoundException();
+    const types: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.pdf': 'application/pdf' };
+    return { stream: createReadStream(d.storage_key), type: types[extname(d.filename).toLowerCase()] ?? 'application/octet-stream', name: d.filename };
+  }
   mine(u: AuthUser) { return this.db.q('select * from loans where member_id=$1 order by created_at desc', [u.memberId]); }
   guaranteeRequests(u: AuthUser) {
     return this.db.q(`select l.id loan_id,l.principal,l.tenor_months,m.first_name,m.last_name,g.consent from loan_guarantors g
@@ -72,6 +111,10 @@ export class LoansService {
       }
       return { consent: d.consent };
     });
+  }
+  all(status?: string) {
+    return this.db.q(`select l.*,m.first_name,m.last_name,m.membership_id from loans l join members m on m.id=l.member_id
+      where ($1::text is null or l.status::text=$1) order by l.created_at desc limit 500`, [status ?? null]);
   }
   queue() {
     return this.db.q(`select l.*,m.first_name,m.last_name,m.membership_id from loans l join members m on m.id=l.member_id
@@ -135,11 +178,21 @@ export class LoansController {
   constructor(private s: LoansService) {}
   @Get('products') products() { return this.s.products(); }
   @Post() apply(@CurrentUser() u: AuthUser, @Body() d: LoanApplyDto) { return this.s.apply(u, d); }
+  @Get('eligibility') elig(@CurrentUser() u: AuthUser, @Query('productCode') c: string) { return this.s.eligibility(u, c); }
+  @Post(':id/documents') doc(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: KycDocDto) { return this.s.addDocument(u, id, d); }
+  @Roles('loan_officer', 'accountant', 'admin') @Get(':id/detail') detail(@Param('id', ParseUUIDPipe) id: string) { return this.s.detail(id); }
+  @Roles('loan_officer', 'accountant', 'admin') @Get(':id/documents/:docId/file')
+  async lfile(@Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string, @Res({ passthrough: true }) res: any) {
+    const f = await this.s.file(id, docId);
+    res.set({ 'Content-Type': f.type, 'Content-Disposition': `inline; filename="${encodeURIComponent(f.name)}"`, 'Cache-Control': 'private, no-store' });
+    return new StreamableFile(f.stream);
+  }
   @Get('mine') mine(@CurrentUser() u: AuthUser) { return this.s.mine(u); }
   @Get('guarantee-requests') gr(@CurrentUser() u: AuthUser) { return this.s.guaranteeRequests(u); }
   @Post(':id/consent') consent(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ConsentDto) { return this.s.consent(u, id, d); }
   @Get(':id/schedule') sched(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.schedule(u, id); }
-  @Roles('loan_officer', 'admin') @Get('queue') queue() { return this.s.queue(); }
+  @Roles('loan_officer', 'accountant', 'admin') @Get('all') all(@Query('status') s?: string) { return this.s.all(s); }
+  @Roles('loan_officer', 'accountant', 'admin') @Get('queue') queue() { return this.s.queue(); }
   @Roles('loan_officer', 'admin') @Post(':id/review') review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ReviewDto) { return this.s.review(u, id, d); }
   @Roles('accountant', 'admin') @Post(':id/disburse') disburse(@Param('id', ParseUUIDPipe) id: string) { return this.s.disburse(id); }
   @Roles('admin') @Post('jobs/penalties') pen() { return this.s.runPenalties(); }

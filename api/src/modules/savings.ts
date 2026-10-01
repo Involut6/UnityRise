@@ -19,10 +19,14 @@ export class SavingsService {
   async wallet(u: AuthUser) {
     await this.approved(u);
     const w = await this.db.one('select monthly_target from wallets where member_id=$1', [u.memberId]);
-    return { balance: await savingsBalance(this.db.q, u.memberId!), monthlyTarget: Number(w.monthly_target) };
+    const [t] = await this.db.q(`select coalesce(sum(amount) filter (where type in ('contribution','topup')),0) contributions,
+      coalesce(sum(amount) filter (where type in ('interest','investment_return')),0) returns from transactions where member_id=$1`, [u.memberId]);
+    const [p] = await this.db.q("select coalesce(sum(amount),0) pending from payments where member_id=$1 and status='pending' and purpose='topup'", [u.memberId]);
+    return { balance: await savingsBalance(this.db.q, u.memberId!), monthlyTarget: Number(w.monthly_target), totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
   }
   async setTarget(u: AuthUser, d: TargetDto) { await this.approved(u); await this.db.q('update wallets set monthly_target=$2 where member_id=$1', [u.memberId, d.monthlyTarget]); return { ok: true }; }
-  async history(u: AuthUser, limit = 50) { return this.db.q('select id,type,amount,direction,affects_savings,narration,created_at from transactions where member_id=$1 order by created_at desc limit $2', [this.mid(u), Math.min(limit, 200)]); }
+  async history(u: AuthUser, limit = 50) { return this.db.q('select id,type,amount,direction,affects_savings,reference,narration,created_at from transactions where member_id=$1 order by created_at desc limit $2', [this.mid(u), Math.min(limit, 500)]); }
+  async myPayments(u: AuthUser) { return this.db.q('select id,provider,reference,purpose,amount,status,created_at,settled_at from payments where member_id=$1 order by created_at desc limit 100', [this.mid(u)]); }
   async withdraw(u: AuthUser, d: AmountDto) {
     await this.approved(u);
     return this.db.tx(async q => {
@@ -79,6 +83,7 @@ export class SavingsController {
   @Get('savings') wallet(@CurrentUser() u: AuthUser) { return this.s.wallet(u); }
   @Put('savings/target') target(@CurrentUser() u: AuthUser, @Body() d: TargetDto) { return this.s.setTarget(u, d); }
   @Get('savings/transactions') tx(@CurrentUser() u: AuthUser, @Query('limit') l?: string) { return this.s.history(u, Number(l) || 50); }
+  @Get('payments/mine') pays(@CurrentUser() u: AuthUser) { return this.s.myPayments(u); }
   @Post('savings/withdraw') wd(@CurrentUser() u: AuthUser, @Body() d: AmountDto) { return this.s.withdraw(u, d); }
   @Post('payments/initiate') init(@CurrentUser() u: AuthUser, @Body() d: PayInitDto) { return this.s.initiate(u, d); }
   /** Dev-only helper so the flow is testable without live gateway credentials. */

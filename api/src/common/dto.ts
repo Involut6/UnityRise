@@ -57,3 +57,5 @@ export class PollDto {
 export class VoteDto { @IsInt() @Min(0) optionIndex: number }
 export class MeetingDto { @IsString() title: string; @IsDateString() heldAt: string; @IsOptional() @IsString() venue?: string }
 export class MinutesDto { @IsString() minutes: string }
+
+export class ChangePasswordDto { @IsString() current: string; @IsString() @Length(8, 72) next: string }
