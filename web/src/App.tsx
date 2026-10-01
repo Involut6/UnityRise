@@ -47,7 +47,7 @@ export default function App() {
     <Route path="admin" element={<StaffGate><AppShell mode="admin" /></StaffGate>}>
       <Route index element={E(AdminDashboard)} /><Route path="members" element={E(Members)} /><Route path="members/:id" element={E(MemberDetail)} />
       <Route path="kyc" element={E(Kyc, ['admin'])} /><Route path="users" element={E(Users, ['super_admin'])} /><Route path="savings" element={E(AdminSavings, ['admin', 'accountant'])} />
-      <Route path="loans" element={E(AdminLoans, ['loan_officer', 'accountant', 'admin'])} /><Route path="investments" element={E(AdminInvestments, ['admin', 'accountant'])} />
+      <Route path="loans" element={E(AdminLoans, ['loan_manager', 'accountant', 'admin'])} /><Route path="investments" element={E(AdminInvestments, ['admin', 'accountant'])} />
       <Route path="payments" element={E(Payments, ['admin', 'accountant'])} /><Route path="transactions" element={E(AdminTransactions, ['admin', 'accountant'])} />
       <Route path="reports" element={E(Reports, ['admin', 'accountant'])} /><Route path="communication" element={E(Communication, ['admin'])} /><Route path="governance" element={E(AdminGovernance, ['admin'])} />
       <Route path="documents" element={E(Documents, ['admin'])} /><Route path="audit" element={E(Audit, ['admin'])} /><Route path="settings" element={E(Settings, ['admin'])} />

@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, clearCache, hasToken, setToken, setUnauthorizedHandler } from './api';
 
-export type Role = 'member' | 'loan_officer' | 'accountant' | 'admin' | 'super_admin';
+export type Role = 'member' | 'loan_manager' | 'accountant' | 'admin' | 'super_admin';
 export interface Me {
   id: string; email: string; phone: string | null; role: Role; totp_enabled: boolean; member_id: string | null; membership_id: string | null;
   first_name: string | null; last_name: string | null; kyc_status: 'draft' | 'submitted' | 'approved' | 'rejected' | null; kyc_note: string | null; created_at: string; password_changed_at: string | null;

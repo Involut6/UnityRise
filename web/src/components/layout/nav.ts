@@ -21,7 +21,7 @@ export const ADMIN_NAV: NavGroup[] = [
     { to: '/admin/users', label: 'Users & roles', icon: UserCog, roles: ['super_admin'] } ] },
   { title: 'Finance', items: [
     { to: '/admin/savings', label: 'Savings', icon: PiggyBank, roles: ['admin', 'accountant'] },
-    { to: '/admin/loans', label: 'Loans', icon: HandCoins, roles: ['loan_officer', 'accountant', 'admin'], badgeKey: 'pendingLoans', primary: true },
+    { to: '/admin/loans', label: 'Loans', icon: HandCoins, roles: ['loan_manager', 'accountant', 'admin'], badgeKey: 'pendingLoans', primary: true },
     { to: '/admin/investments', label: 'Investments', icon: TrendingUp, roles: ['admin', 'accountant'] },
     { to: '/admin/payments', label: 'Payments', icon: Wallet, roles: ['admin', 'accountant'] },
     { to: '/admin/transactions', label: 'Transactions', icon: Banknote, roles: ['admin', 'accountant'] } ] },

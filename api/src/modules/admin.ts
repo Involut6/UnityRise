@@ -3,7 +3,7 @@ import { IsIn } from 'class-validator';
 import { Db } from '../common/db';
 import { AuthUser, CurrentUser, Roles } from '../common/auth';
 
-class RoleDto { @IsIn(['member', 'loan_officer', 'accountant', 'admin']) role: string }
+class RoleDto { @IsIn(['member', 'loan_manager', 'accountant', 'admin']) role: string }
 
 @Controller('admin')
 export class AdminController {

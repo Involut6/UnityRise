@@ -3,12 +3,12 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Db } from './db';
 
-export type Role = 'member' | 'loan_officer' | 'accountant' | 'admin' | 'super_admin';
+export type Role = 'member' | 'loan_manager' | 'accountant' | 'admin' | 'super_admin';
 export interface AuthUser { id: string; role: Role; memberId: string | null }
 
 export const Public = () => SetMetadata('public', true);
 export const Roles = (...r: Role[]) => SetMetadata('roles', r);
-export const STAFF: Role[] = ['loan_officer', 'accountant', 'admin', 'super_admin'];
+export const STAFF: Role[] = ['loan_manager', 'accountant', 'admin', 'super_admin'];
 export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionContext): AuthUser => ctx.switchToHttp().getRequest().user);
 
 /** Global guard: verifies the JWT (unless @Public) then enforces @Roles. super_admin passes every role check. */

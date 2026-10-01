@@ -20,9 +20,9 @@ node api/test/smoke.js                   # end-to-end test against a running API
 ```
 
 ## Implemented
-Registration + KYC workflow (UR-YYYY-XXXXX IDs), TOTP 2FA, RBAC (member / loan_officer / accountant / admin / super_admin),
+Registration + KYC workflow (UR-YYYY-XXXXX IDs), TOTP 2FA, RBAC (member / loan_manager / accountant / admin / super_admin),
 savings wallet on an immutable ledger, Paystack/Flutterwave payment flow with verified webhooks + idempotent settlement,
-6 loan products (eligibility vs savings, 2 guarantor consents, 2-approver sign-off, schedule generation, repayments, penalties, reminders),
+6 interest-free loan types (limit = a multiple of the member's savings + live investments, 2 guarantor consents, one final approval by a loan manager or the super admin, equal monthly instalments, late-payment penalty, reminders),
 investment schemes (maker-checker approval, subscriptions, maturity payout), announcements/notifications, polls & resolutions
 (one-member-one-vote), meetings/QR-style check-in/minutes search, reports (JSON + CSV), audit log.
 
@@ -30,7 +30,7 @@ investment schemes (maker-checker approval, subscriptions, maturity payout), ann
 - Live gateway SDK calls (Paystack/Flutterwave/NIBSS), BVN/NIN verification API, SMS (Termii), email (SendGrid), FCM push — adapters are stubbed.
 - PDF exports, mobile apps (phase 2), S3 storage (KYC files currently on local disk), Redis/Mongo (not needed yet; audit logs live in Postgres).
 - Scheduled jobs: `POST /api/loans/jobs/penalties` and `/jobs/reminders` must be triggered daily by a cron.
-- Interest accrual on savings, liveness check, dividends report, CAC templates.
+- Liveness check, dividends report, CAC templates.
 
 See `docs/BACKEND_AUDIT.md` for the security/architecture audit, what was hardened, and the remaining gaps.
 Environment variables are documented in `api/.env.example`; the API refuses to start if required config is invalid.
@@ -41,3 +41,9 @@ Environment variables are documented in `api/.env.example`; the API refuses to s
 - Session timeout: 15 minutes idle → 60 s warning → sign out. "Stay signed in" refreshes the token (`POST /api/auth/refresh`).
 - "Export Excel" downloads CSV (opens in Excel). "Export PDF" uses the browser print dialog → Save as PDF.
 - Test flows: `node api/test/smoke.js` (API) and the Playwright script described in the PR/commit for UI.
+
+## Loan rules
+- Loans carry **no interest**. Members repay the amount borrowed in equal monthly instalments; a late instalment gets a one-time 5% late-payment penalty.
+- The borrowing limit is `multiple × (savings balance + money invested in live schemes)`; the multiple depends on the loan type (`loan_products.max_multiple_of_savings`).
+- Every loan needs guarantor consent, then a decision from a **loan manager or the super admin** (admins cannot approve). The accountant, admin or super admin disburses.
+- UI: members can hide balances with the eye button (remembered per browser); custom select / date / date-time pickers replace the native controls.

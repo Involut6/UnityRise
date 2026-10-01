@@ -19,12 +19,12 @@ export class ReportsService {
     const id = u.memberId;
     if (!id) throw new ForbiddenException();
     const [inv] = await this.db.q(`select coalesce(sum(x.amount),0) invested from investment_subscriptions x join investment_schemes s on s.id=x.scheme_id where x.member_id=$1 and s.status<>'matured'`, [id]);
-    const [loan] = await this.db.q(`select coalesce(sum(s.principal_due+s.interest_due+s.penalty-s.paid),0) outstanding from loan_schedule s join loans l on l.id=s.loan_id where l.member_id=$1 and l.status='active'`, [id]);
-    const [ret] = await this.db.q("select coalesce(sum(amount),0) r from transactions where member_id=$1 and type in ('interest','investment_return')", [id]);
+    const [loan] = await this.db.q(`select coalesce(sum(s.principal_due+s.penalty-s.paid),0) outstanding from loan_schedule s join loans l on l.id=s.loan_id where l.member_id=$1 and l.status='active'`, [id]);
+    const [ret] = await this.db.q("select coalesce(sum(amount),0) r from transactions where member_id=$1 and type = 'investment_return'", [id]);
     return {
       savings: await savingsBalance(this.db.q, id), invested: Number(inv.invested), loanOutstanding: Number(loan.outstanding), returnsEarned: Number(ret.r),
-      upcoming: await this.db.q(`select s.due_date,s.installment_no,(s.principal_due+s.interest_due+s.penalty-s.paid) amount from loan_schedule s join loans l on l.id=s.loan_id
-        where l.member_id=$1 and l.status='active' and s.paid < s.principal_due+s.interest_due+s.penalty order by s.due_date limit 3`, [id]),
+      upcoming: await this.db.q(`select s.due_date,s.installment_no,(s.principal_due+s.penalty-s.paid) amount from loan_schedule s join loans l on l.id=s.loan_id
+        where l.member_id=$1 and l.status='active' and s.paid < s.principal_due+s.penalty order by s.due_date limit 3`, [id]),
       recent: await this.db.q('select type,amount,direction,narration,created_at from transactions where member_id=$1 order by created_at desc limit 5', [id]),
       unread: Number((await this.db.one('select count(*) n from notifications where member_id=$1 and read_at is null', [id])).n),
     };
@@ -34,9 +34,9 @@ export class ReportsService {
     const [s] = await this.db.q('select coalesce(sum(direction*amount),0) savings from transactions where affects_savings');
     const [i] = await this.db.q("select coalesce(sum(x.amount),0) invested from investment_subscriptions x join investment_schemes s on s.id=x.scheme_id where s.status<>'matured'");
     const [l] = await this.db.q(`select count(*) filter (where l.status='active') active_loans, count(*) filter (where l.status='under_review') pending_loans from loans l`);
-    const [o] = await this.db.q(`select coalesce(sum(s.principal_due+s.interest_due+s.penalty-s.paid),0) outstanding,
-      coalesce(sum(least(s.paid,s.principal_due+s.interest_due+s.penalty)) filter (where s.due_date<=current_date),0) paid_due,
-      coalesce(sum(s.principal_due+s.interest_due+s.penalty) filter (where s.due_date<=current_date),0) due
+    const [o] = await this.db.q(`select coalesce(sum(s.principal_due+s.penalty-s.paid),0) outstanding,
+      coalesce(sum(least(s.paid,s.principal_due+s.penalty)) filter (where s.due_date<=current_date),0) paid_due,
+      coalesce(sum(s.principal_due+s.penalty) filter (where s.due_date<=current_date),0) due
       from loan_schedule s join loans l on l.id=s.loan_id where l.status='active'`);
     const series = await this.db.q(`with months as (select to_char(d,'YYYY-MM') m from generate_series(date_trunc('month',now())-interval '5 months',date_trunc('month',now()),'1 month') d)
       select months.m as month,
@@ -72,8 +72,8 @@ export class ReportsService {
         coalesce(sum(t.direction*t.amount) filter (where t.affects_savings),0) balance from members m left join transactions t on t.member_id=m.id
         where m.kyc_status='approved' group by m.id order by m.membership_id`, [f, t]);
       case 'loan-book': return this.db.q(`select l.id,m.membership_id,m.first_name||' '||m.last_name member,l.product_code,l.principal,l.status,
-        coalesce(sum(s.principal_due+s.interest_due+s.penalty-s.paid),0) outstanding,
-        coalesce(sum(s.principal_due+s.interest_due+s.penalty-s.paid) filter (where s.due_date<current_date),0) arrears
+        coalesce(sum(s.principal_due+s.penalty-s.paid),0) outstanding,
+        coalesce(sum(s.principal_due+s.penalty-s.paid) filter (where s.due_date<current_date),0) arrears
         from loans l join members m on m.id=l.member_id left join loan_schedule s on s.loan_id=l.id where l.status in ('active','completed','defaulted') group by l.id,m.id order by l.created_at`);
       case 'member-savings': return this.db.q(`select m.membership_id,m.first_name||' '||m.last_name member,coalesce(sum(t.direction*t.amount) filter (where t.affects_savings),0) balance
         from members m left join transactions t on t.member_id=m.id where m.kyc_status='approved' group by m.id order by m.membership_id`);
@@ -91,8 +91,8 @@ export class ReportsService {
 export class ReportsController {
   constructor(private s: ReportsService) {}
   @Get('dashboard') dash(@CurrentUser() u: AuthUser) { return this.s.dashboard(u); }
-  @Roles('admin', 'accountant', 'loan_officer') @Get('admin/summary') sum() { return this.s.admin(); }
-  @Roles('admin', 'accountant', 'loan_officer') @Get('admin/overview') ov() { return this.s.overview(); }
+  @Roles('admin', 'accountant', 'loan_manager') @Get('admin/summary') sum() { return this.s.admin(); }
+  @Roles('admin', 'accountant', 'loan_manager') @Get('admin/overview') ov() { return this.s.overview(); }
   @Roles('admin', 'accountant') @Get('reports/:kind')
   async rep(@Param('kind') k: string, @Query('format') f: string, @Query('from') from: string, @Query('to') to: string, @Res() res: Response) {
     if (k === 'my-statement') throw new BadRequestException();
