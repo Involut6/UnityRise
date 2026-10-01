@@ -15,7 +15,8 @@ cd api && cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, ADMIN_*
 npm i && npm run migrate && npm run seed && npm run build
 npm start                                  # API on :3000 (loads .env)
 cd ../web && npm i && npm run build      # API serves web/dist; or `npm run dev` for :5173
-node api/test/smoke.js                   # end-to-end test against a running API
+node api/test/smoke.js                   # end-to-end test against a running API (export the .env vars first)
+(cd api && npm test)                     # unit tests (vitest)
 ```
 
 ## Implemented
@@ -30,6 +31,9 @@ investment schemes (maker-checker approval, subscriptions, maturity payout), ann
 - PDF exports, mobile apps (phase 2), S3 storage (KYC files currently on local disk), Redis/Mongo (not needed yet; audit logs live in Postgres).
 - Scheduled jobs: `POST /api/loans/jobs/penalties` and `/jobs/reminders` must be triggered daily by a cron.
 - Interest accrual on savings, liveness check, dividends report, CAC templates.
+
+See `docs/BACKEND_AUDIT.md` for the security/architecture audit, what was hardened, and the remaining gaps.
+Environment variables are documented in `api/.env.example`; the API refuses to start if required config is invalid.
 
 ## Frontend notes
 - Routes: member portal at `/`, admin at `/admin` (staff who are also members switch via the top bar). Every page is lazy-loaded; charts load on demand.

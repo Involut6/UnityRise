@@ -2,9 +2,13 @@ import { BadRequestException, Body, Controller, Get, Injectable, Module, Post, R
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { authenticator } from 'otplib';
+import { config } from '../common/config';
 import { Db } from '../common/db';
 import { AuthUser, CurrentUser, Public } from '../common/auth';
 import { ChangePasswordDto, LoginDto, RegisterDto } from '../common/dto';
+
+// Valid bcrypt hash of a random string; compared against when the user is unknown so response time doesn't reveal account existence.
+const DUMMY_HASH = bcrypt.hashSync(Math.random().toString(36), 12);
 
 @Injectable()
 export class AuthService {
@@ -22,14 +26,32 @@ export class AuthService {
   private event(uid: string, ok: boolean, ip?: string, ua?: string) {
     return this.db.q('insert into login_events(user_id,ip,user_agent,success) values($1,$2,$3,$4)', [uid, ip ?? null, (ua ?? '').slice(0, 200), ok]).catch(() => {});
   }
+  private audit(actor: string, action: string, ip?: string) {
+    return this.db.q('insert into audit_logs(actor_id,action,ip) values($1,$2,$3)', [actor, action, ip ?? null]);
+  }
+  /** Atomically count a failure and lock the account once the threshold is hit. */
+  private async recordFailure(id: string, ip?: string, ua?: string) {
+    const { maxFailures, lockMinutes } = config().login;
+    const [u] = await this.db.q(`update users set failed_logins=failed_logins+1,
+      locked_until=case when failed_logins+1>=$2 then now()+make_interval(mins=>$3) else locked_until end
+      where id=$1 returning failed_logins`, [id, maxFailures, lockMinutes]);
+    await this.audit(id, u.failed_logins >= maxFailures ? 'auth.login.locked_out' : 'auth.login.failed', ip);
+    await this.event(id, false, ip, ua);
+  }
   async login(d: LoginDto, ip?: string, ua?: string) {
     const u = await this.db.one('select * from users where email=$1', [d.email.toLowerCase()]);
-    // Same error for unknown user / bad password to avoid account enumeration.
-    if (!u || !u.is_active || !(await bcrypt.compare(d.password, u.password_hash))) { if (u) await this.event(u.id, false, ip, ua); throw new UnauthorizedException('Invalid credentials'); }
+    // Same error for unknown user / bad password / locked account to avoid account enumeration.
+    const invalid = new UnauthorizedException('Invalid credentials');
+    if (!u || !u.is_active) { await bcrypt.compare(d.password, DUMMY_HASH); throw invalid; } // equalise timing
+    if (u.locked_until && new Date(u.locked_until) > new Date()) { await this.audit(u.id, 'auth.login.locked', ip); await this.event(u.id, false, ip, ua); throw invalid; }
+    const ok = await bcrypt.compare(d.password, u.password_hash);
+    if (!ok) { await this.recordFailure(u.id, ip, ua); throw invalid; }
     if (u.totp_enabled) {
       if (!d.code) return { twoFactorRequired: true };
-      if (!authenticator.check(d.code, u.totp_secret)) { await this.event(u.id, false, ip, ua); throw new UnauthorizedException('Invalid 2FA code'); }
+      if (!authenticator.check(d.code, u.totp_secret)) { await this.recordFailure(u.id, ip, ua); throw new UnauthorizedException('Invalid 2FA code'); }
     }
+    await this.db.q('update users set failed_logins=0,locked_until=null where id=$1', [u.id]);
+    await this.audit(u.id, 'auth.login.success', ip);
     await this.event(u.id, true, ip, ua);
     return { token: await this.jwt.signAsync({ sub: u.id }) };
   }
