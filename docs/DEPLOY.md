@@ -26,7 +26,7 @@ Environment variables (Production):
 | `PAYSTACK_WEBHOOK_SECRET`, `FLUTTERWAVE_WEBHOOK_SECRET` | when you add live gateways |
 | `NODE_ENV` | `production` |
 
-Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,…}`. A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
+Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,"database":"connected","migrations":5,…}`. If not, it says in words what is wrong (wrong database login, host not found, tables missing, …). A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
 
 ## 2. Web project
 New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add one variable:
@@ -48,7 +48,8 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | `No Output Directory named "public" found` | The API is functions-only, but Vercel still wants a static folder. `api/vercel.json` sets `outputDirectory: "public"` and `api/public/index.html` exists; make sure both are deployed |
 | `require() of ES Module … not supported` | You are deploying an older commit. The API is compiled as native ES modules (Nest 12 is ESM-only) and is loaded with `import()`, which works in Vercel's runtime. Deploy a branch that includes this fix |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
-| `relation "…" does not exist` | Migrations not applied to this database |
+| `relation "…" does not exist`, or health says the tables are missing | Migrations not applied to **this** database (the one in the Vercel `DATABASE_URL`). Run `npm run migrate` and `npm run seed` with that same connection string |
+| Login returns a plain 500 (`Internal server error` + `requestId`) | Usually the database. Open `/api/health` for the reason; the exact error is in Vercel → Deployments → Functions → Logs (search the `requestId`) |
 | Browser: CORS error + **500** on the `OPTIONS` (preflight) request | The API failed to start because of a bad environment variable (for example `CORS_ORIGIN=*`, a `JWT_SECRET` under 32 characters, or a missing `DATABASE_URL`). Open `/api/health` to read the message. Never use `*` for `CORS_ORIGIN` |
 | Browser: CORS error (preflight is 204 or 200) | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
 | Browser calls `/api/...` on the web domain | `VITE_API_URL` not set at **build** time; set it and redeploy |
