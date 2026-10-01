@@ -1,0 +1,82 @@
+import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, ForbiddenException } from '@nestjs/common';
+import { mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
+import { Db } from '../common/db';
+import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
+import { KycDocDto, KycDto, ReviewDto } from '../common/dto';
+import { notify } from '../common/ledger';
+
+const REQUIRED_DOCS = ['photo', 'id_card', 'signature', 'proof_of_address'];
+
+@Injectable()
+export class MembersService {
+  constructor(private db: Db) {}
+  private mid(u: AuthUser) { if (!u.memberId) throw new ForbiddenException('Not a member account'); return u.memberId; }
+  async saveKyc(u: AuthUser, d: KycDto) {
+    const m = await this.db.one('select kyc_status from members where id=$1', [this.mid(u)]);
+    if (!['draft', 'rejected'].includes(m.kyc_status)) throw new BadRequestException('KYC already submitted');
+    await this.db.q('update members set date_of_birth=$2,bvn=$3,nin=$4,address=$5 where id=$1', [u.memberId, d.dateOfBirth, d.bvn, d.nin, d.address]);
+    return { saved: true };
+  }
+  async upload(u: AuthUser, d: KycDocDto) {
+    const buf = Buffer.from(d.contentBase64, 'base64');
+    if (!buf.length || buf.length > 5 * 1024 * 1024) throw new BadRequestException('File must be 1B–5MB');
+    const dir = join(process.env.UPLOAD_DIR ?? 'uploads', this.mid(u)); mkdirSync(dir, { recursive: true });
+    const key = join(dir, `${randomUUID()}.bin`); writeFileSync(key, buf); // swap for S3 in production
+    await this.db.q('delete from kyc_documents where member_id=$1 and kind=$2', [u.memberId, d.kind]);
+    await this.db.q('insert into kyc_documents(member_id,kind,filename,storage_key) values($1,$2,$3,$4)', [u.memberId, d.kind, d.filename.slice(0, 200), key]);
+    return { uploaded: d.kind };
+  }
+  async submit(u: AuthUser) {
+    const id = this.mid(u);
+    const m = await this.db.one('select * from members where id=$1', [id]);
+    if (!m.bvn || !m.nin || !m.address || !m.date_of_birth) throw new BadRequestException('Complete personal details first');
+    const docs = (await this.db.q('select kind from kyc_documents where member_id=$1', [id])).map(r => r.kind);
+    const missing = REQUIRED_DOCS.filter(k => !docs.includes(k));
+    if (missing.length) throw new BadRequestException(`Missing documents: ${missing.join(', ')}`);
+    await this.db.q("update members set kyc_status='submitted',kyc_note=null where id=$1 and kyc_status in ('draft','rejected')", [id]);
+    return { status: 'submitted' };
+  }
+  list(status?: string) {
+    return this.db.q(`select id,membership_id,first_name,last_name,kyc_status,created_at from members
+      where ($1::text is null or kyc_status::text=$1) order by created_at desc limit 200`, [status ?? null]);
+  }
+  async detail(id: string) {
+    const m = await this.db.one(`select m.*, u.email, u.phone from members m join users u on u.id=m.user_id where m.id=$1`, [id]);
+    if (!m) throw new NotFoundException();
+    m.bvn = m.bvn && `*******${m.bvn.slice(-4)}`; m.nin = m.nin && `*******${m.nin.slice(-4)}`; // mask PII in API output
+    m.documents = await this.db.q('select id,kind,filename,created_at from kyc_documents where member_id=$1', [id]);
+    return m;
+  }
+  async review(staff: AuthUser, id: string, d: ReviewDto) {
+    return this.db.tx(async q => {
+      const [m] = await q('select * from members where id=$1 for update', [id]);
+      if (!m) throw new NotFoundException();
+      if (m.kyc_status !== 'submitted') throw new BadRequestException('Member KYC is not awaiting review');
+      if (d.decision === 'reject') {
+        if (!d.note) throw new BadRequestException('A reason is required');
+        await q("update members set kyc_status='rejected',kyc_note=$2,reviewed_by=$3 where id=$1", [id, d.note, staff.id]);
+        await notify(q, id, 'KYC rejected', d.note);
+        return { status: 'rejected' };
+      }
+      const [{ n }] = await q("select nextval('membership_seq') n");
+      const mid = `UR-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
+      await q("update members set kyc_status='approved',membership_id=$2,reviewed_by=$3,approved_at=now() where id=$1", [id, mid, staff.id]);
+      await q('insert into wallets(member_id) values($1) on conflict do nothing', [id]);
+      await notify(q, id, 'Welcome to UnityRise', `Your membership has been approved. Membership ID: ${mid}`);
+      return { status: 'approved', membershipId: mid };
+    });
+  }
+}
+@Controller('members')
+export class MembersController {
+  constructor(private s: MembersService) {}
+  @Put('me/kyc') save(@CurrentUser() u: AuthUser, @Body() d: KycDto) { return this.s.saveKyc(u, d); }
+  @Post('me/kyc/documents') up(@CurrentUser() u: AuthUser, @Body() d: KycDocDto) { return this.s.upload(u, d); }
+  @Post('me/kyc/submit') sub(@CurrentUser() u: AuthUser) { return this.s.submit(u); }
+  @Roles(...STAFF) @Get() list(@Query('status') s?: string) { return this.s.list(s); }
+  @Roles(...STAFF) @Get(':id') get(@Param('id', ParseUUIDPipe) id: string) { return this.s.detail(id); }
+  @Roles('admin') @Post(':id/review') review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ReviewDto) { return this.s.review(u, id, d); }
+}
+@Module({ providers: [MembersService], controllers: [MembersController] }) export class MembersModule {}
