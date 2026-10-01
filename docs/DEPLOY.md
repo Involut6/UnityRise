@@ -13,7 +13,7 @@ npm run seed             # creates / resets the super admin
 Re-run `npm run migrate` after every release that adds a file under `api/db/`.
 
 ## 1. API project
-New Project → import the repo → **Root Directory: `api`** → Framework Preset: **Other**. `api/vercel.json` already sets the build command, the function and the daily cron.
+New Project → import the repo → **Root Directory: `api`** → Framework Preset: **Other**. `api/vercel.json` already sets `"framework": null` (so Vercel does not switch on its built-in NestJS mode), the build command, the function and the daily cron.
 
 Environment variables (Production):
 
@@ -43,6 +43,7 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | Symptom | Cause |
 |---|---|
 | 404 on every URL | Root Directory is not `api`, or `vercel.json` was not picked up |
+| `No entrypoint found which imports nestjs` | Vercel auto-detected NestJS. `api/vercel.json` sets `"framework": null` to prevent it; also set Settings → Build & Development → Framework Preset to **Other** |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
 | `relation "…" does not exist` | Migrations not applied to this database |
 | Browser: CORS error | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
