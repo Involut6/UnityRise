@@ -45,7 +45,8 @@ export function useApi<T = any>(path: string | null) {
   const [data, setData] = useState<T | null>(path && cache.has(path) ? (cache.get(path) as T) : null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(!!path && !cache.has(path));
-  const alive = useRef(true); useEffect(() => () => { alive.current = false; }, []);
+  // Set true on every mount: React StrictMode (dev) runs mount → cleanup → mount, so cleanup alone must not leave this false.
+  const alive = useRef(true); useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const load = useCallback((force = false) => {
     if (!path) { setData(null); setLoading(false); return; }
     if (!force && cache.has(path)) { setData(cache.get(path) as T); setLoading(false); return; }
