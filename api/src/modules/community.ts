@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
-import { AnnounceDto, MeetingDto, MinutesDto, PollDto, VoteDto } from '../common/dto';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth.js';
+import { AnnounceDto, MeetingDto, MinutesDto, PollDto, VoteDto } from '../common/dto.js';
 
 @Injectable()
 export class CommunityService {

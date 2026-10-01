@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Module, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { IsIn } from 'class-validator';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Roles } from '../common/auth';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Roles } from '../common/auth.js';
 
 class RoleDto { @IsIn(['member', 'loan_manager', 'accountant', 'admin']) role: string }
 

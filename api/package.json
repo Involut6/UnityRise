@@ -8,8 +8,8 @@
     "build": "tsc",
     "start": "node --env-file=.env dist/main.js",
     "dev": "tsc && node --env-file=.env dist/main.js",
-    "migrate": "node --env-file=.env db/migrate.js",
-    "seed": "node --env-file=.env db/seed.js",
+    "migrate": "node --env-file=.env db/migrate.cjs",
+    "seed": "node --env-file=.env db/seed.cjs",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -42,5 +42,6 @@
   },
   "engines": {
     "node": "22.x"
-  }
+  },
+  "type": "module"
 }

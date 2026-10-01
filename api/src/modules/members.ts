@@ -1,9 +1,9 @@
 import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, ForbiddenException, StreamableFile, Res } from '@nestjs/common';
-import { MAX_FILE, sniffFile } from '../common/files';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
-import { KycDocDto, KycDto, ReviewDto } from '../common/dto';
-import { notify } from '../common/ledger';
+import { MAX_FILE, sniffFile } from '../common/files.js';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth.js';
+import { KycDocDto, KycDto, ReviewDto } from '../common/dto.js';
+import { notify } from '../common/ledger.js';
 
 const REQUIRED_DOCS = ['photo', 'id_card', 'signature', 'proof_of_address'];
 

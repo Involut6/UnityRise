@@ -1,5 +1,5 @@
 import { Global, Injectable, Module, OnModuleDestroy } from '@nestjs/common';
-import { config } from './config';
+import { config } from './config.js';
 import { Pool, PoolClient } from 'pg';
 
 export type Q = <T = any>(sql: string, params?: any[]) => Promise<T[]>;
