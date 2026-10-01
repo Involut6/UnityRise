@@ -23,7 +23,7 @@ export class SavingsService {
     await this.approved(u);
     const w = await this.db.one('select monthly_target from wallets where member_id=$1', [u.memberId]);
     const [t] = await this.db.q(`select coalesce(sum(amount) filter (where type in ('contribution','topup')),0) contributions,
-      coalesce(sum(amount) filter (where type in ('interest','investment_return')),0) returns from transactions where member_id=$1`, [u.memberId]);
+      coalesce(sum(amount) filter (where type = 'investment_return'),0) returns from transactions where member_id=$1`, [u.memberId]);
     const [p] = await this.db.q("select coalesce(sum(amount),0) pending from payments where member_id=$1 and status='pending' and purpose='topup'", [u.memberId]);
     return { balance: await savingsBalance(this.db.q, u.memberId!), monthlyTarget: Number(w.monthly_target), totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
   }

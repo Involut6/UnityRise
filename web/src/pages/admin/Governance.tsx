@@ -3,7 +3,7 @@ import { CalendarPlus, FileText, Plus, Users } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, Skeleton } from '../../components/ui/primitives';
 import { PageHeader } from '../../components/ui/dashboard';
 import { Tabs, TabPanel, useTabParam } from '../../components/ui/data';
-import { FormField, Input, SearchInput, Textarea } from '../../components/ui/forms';
+import { DateTimePicker, FormField, Input, SearchInput, Textarea } from '../../components/ui/forms';
 import { Drawer, Modal, useAction } from '../../components/ui/overlay';
 import { api, invalidate, useApi } from '../../lib/api';
 import { date, dateTime } from '../../lib/format';
@@ -15,14 +15,14 @@ export function PollForm({ onClose }: { onClose: () => void }) {
   return <Modal title="New poll or resolution" onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!ok} loading={busy} onClick={() => run(() => api('POST', '/polls', { question: q, options: opts.filter(o => o.trim()), closesAt: new Date(closes).toISOString(), isResolution: res }), 'Voting is open')}>Open voting</Button></>}>
     <FormField label="Question or resolution" required><Textarea value={q} onChange={e => setQ(e.target.value)} /></FormField>
     <fieldset className="mb-4"><legend className="mb-1.5 text-sm font-medium">Options <span className="text-danger">*</span></legend><div className="grid gap-2">{opts.map((o, i) => <Input key={i} aria-label={`Option ${i + 1}`} value={o} onChange={e => setOpts(a => a.map((x, j) => (j === i ? e.target.value : x)))} />)}</div>{opts.length < 6 && <Button size="sm" variant="ghost" className="mt-2" icon={<Plus size={14} />} onClick={() => setOpts(a => [...a, ''])}>Add option</Button>}</fieldset>
-    <FormField label="Voting closes" required error={closes && new Date(closes) <= new Date() ? 'Choose a time in the future' : undefined}><Input type="datetime-local" value={closes} onChange={e => setCloses(e.target.value)} /></FormField>
+    <FormField label="Voting closes" required error={closes && new Date(closes) <= new Date() ? 'Choose a time in the future' : undefined}><DateTimePicker min={new Date().toISOString().slice(0, 10)} value={closes} onChange={e => setCloses(e.target.value)} /></FormField>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--c-brand)]" checked={res} onChange={e => setRes(e.target.checked)} />This is a formal resolution</label></Modal>;
 }
 
 function MeetingForm({ onClose }: { onClose: () => void }) {
   const [f, setF] = useState({ title: '', heldAt: '', venue: '' }); const [run, busy] = useAction(() => { invalidate(); onClose(); });
   return <Modal title="Schedule a meeting" onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={!f.title.trim() || !f.heldAt} loading={busy} onClick={() => run(() => api('POST', '/meetings', { title: f.title, heldAt: new Date(f.heldAt).toISOString(), venue: f.venue || undefined }), 'Meeting scheduled')}>Schedule</Button></>}>
-    <FormField label="Title" required><Input value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></FormField><FormField label="Date and time" required><Input type="datetime-local" value={f.heldAt} onChange={e => setF({ ...f, heldAt: e.target.value })} /></FormField><FormField label="Venue"><Input value={f.venue} onChange={e => setF({ ...f, venue: e.target.value })} /></FormField></Modal>;
+    <FormField label="Title" required><Input value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></FormField><FormField label="Date and time" required><DateTimePicker value={f.heldAt} onChange={e => setF({ ...f, heldAt: e.target.value })} /></FormField><FormField label="Venue"><Input value={f.venue} onChange={e => setF({ ...f, venue: e.target.value })} /></FormField></Modal>;
 }
 
 function MeetingDrawer({ m, onClose }: { m: any; onClose: () => void }) {

@@ -1,9 +1,10 @@
 import { ReactNode, Suspense, lazy } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, ChevronRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, EyeOff } from 'lucide-react';
 import { Breadcrumbs, DataTable, type Column } from './data';
 import { Card, CardHeader, EmptyState, Money, Skeleton, StatusBadge, cn } from './primitives';
 import { date, naira, TXN_LABEL } from '../../lib/format';
+import { BalanceToggle, MASK, usePrivacy } from '../../lib/privacy';
 
 export const PageHeader = ({ title, description, breadcrumbs, actions }: { title: string; description?: ReactNode; breadcrumbs?: { label: string; to?: string }[]; actions?: ReactNode }) => (
   <div className="mb-6">{breadcrumbs && <Breadcrumbs items={breadcrumbs} />}
@@ -11,24 +12,28 @@ export const PageHeader = ({ title, description, breadcrumbs, actions }: { title
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}</div></div>
 );
 
-export function StatCard({ label, value, hint, icon, to, tone = 'brand' }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode; to?: string; tone?: 'brand' | 'warning' | 'info' | 'danger' | 'success' }) {
+export function StatCard({ label, value, hint, icon, to, tone = 'brand', sensitive }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode; to?: string; tone?: 'brand' | 'warning' | 'info' | 'danger' | 'success'; sensitive?: boolean }) {
+  const { hidden } = usePrivacy(); const mask = sensitive && hidden;
   const toneCls = { brand: 'bg-brand-soft text-brand', warning: 'bg-warning-soft text-warning', info: 'bg-info-soft text-info', danger: 'bg-danger-soft text-danger', success: 'bg-success-soft text-success' }[tone];
   const body = <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:gap-3.5">{icon && <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', toneCls)} aria-hidden>{icon}</span>}
-    <div className="min-w-0"><p className="text-sm text-muted">{label}</p><p className="num mt-0.5 truncate text-xl font-bold sm:text-2xl">{value}</p>{hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}</div>
+    <div className="min-w-0"><p className="text-sm text-muted">{label}</p><p className="num mt-0.5 truncate text-xl font-bold sm:text-2xl">{mask ? <span aria-label="Hidden">{MASK}</span> : value}</p>{hint && <p className="mt-0.5 text-xs text-muted">{mask && typeof hint === 'string' && /₦/.test(hint) ? '' : hint}</p>}</div>
     {to && <ChevronRight size={18} className="ml-auto mt-1 hidden shrink-0 text-muted sm:block" aria-hidden />}</div>;
   return to ? <Link to={to} className="block rounded-2xl border border-line bg-surface p-5 shadow-card transition max-sm:p-4 hover:border-line-strong hover:shadow-md">{body}</Link> : <Card className="max-sm:p-4">{body}</Card>;
 }
 
 /** The headline balance card. Breakdown labels say exactly what each figure is. */
 export function FinancialCard({ label, total, caption, breakdown, actions }: { label: string; total: string; caption?: string; breakdown: { label: string; value: string; hint?: string }[]; actions?: ReactNode }) {
+  const { hidden } = usePrivacy(); const show = (v: string) => (hidden ? <span aria-label="Hidden">{MASK}</span> : v);
   return <section className="rounded-2xl bg-brand p-5 text-on-brand shadow-card sm:p-6" aria-label={label}>
-    <p className="text-sm font-medium opacity-80">{label}</p><p className="num mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{total}</p>{caption && <p className="mt-1 text-sm opacity-75">{caption}</p>}
-    <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-white/20 pt-4 sm:grid-cols-3">{breakdown.map(b => <div key={b.label}><dt className="text-xs font-medium opacity-75">{b.label}</dt><dd className="num font-semibold">{b.value}</dd>{b.hint && <dd className="text-xs opacity-65">{b.hint}</dd>}</div>)}</dl>
+    <div className="flex items-start justify-between"><p className="text-sm font-medium opacity-80">{label}</p><BalanceToggle onDark className="-mr-2 -mt-2 !size-9" /></div><p className="num mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{show(total)}</p>{caption && <p className="mt-1 text-sm opacity-75">{caption}</p>}
+    <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-white/20 pt-4 sm:grid-cols-3">{breakdown.map(b => <div key={b.label}><dt className="text-xs font-medium opacity-75">{b.label}</dt><dd className="num font-semibold">{show(b.value)}</dd>{b.hint && <dd className="text-xs opacity-65">{b.hint}</dd>}</div>)}</dl>
     {actions && <div className="mt-5 flex flex-wrap gap-2">{actions}</div>}</section>;
 }
 
 const Charts = lazy(() => import('./charts'));
-export function ChartCard({ title, subtitle, action, height = 240, empty, chart }: { title: string; subtitle?: string; action?: ReactNode; height?: number; empty?: boolean; chart: React.ComponentProps<typeof Charts> }) {
+export function ChartCard({ title, subtitle, action, height = 240, empty, chart, sensitive }: { title: string; subtitle?: string; action?: ReactNode; height?: number; empty?: boolean; chart: React.ComponentProps<typeof Charts>; sensitive?: boolean }) {
+  const { hidden } = usePrivacy();
+  if (sensitive && hidden && !empty) return <Card><CardHeader title={title} subtitle={subtitle} /><EmptyState icon={<EyeOff size={22} />} title="Balances are hidden" description="Turn balances back on with the eye button to see this chart." /></Card>;
   return <Card><CardHeader title={title} subtitle={subtitle} action={action} />
     {empty ? <EmptyState title="Not enough data yet" description="This chart fills in as activity is recorded." /> :
       <Suspense fallback={<Skeleton className="w-full" />}><div style={{ height }} role="img" aria-label={`${title} chart`}><Charts {...chart} /></div></Suspense>}</Card>;

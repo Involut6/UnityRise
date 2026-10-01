@@ -14,17 +14,12 @@ export const greeting = () => { const h = new Date().getHours(); return h < 12 ?
 export const toISODate = (d: Date) => d.toISOString().slice(0, 10);
 
 export const TXN_LABEL: Record<string, string> = {
-  contribution: 'Contribution', topup: 'Deposit', withdrawal: 'Withdrawal', interest: 'Interest earned', loan_disbursement: 'Loan disbursement',
+  contribution: 'Contribution', topup: 'Deposit', withdrawal: 'Withdrawal', loan_disbursement: 'Loan disbursement',
   loan_repayment: 'Loan repayment', investment_subscription: 'Investment', investment_return: 'Investment return', penalty: 'Late penalty',
 };
 export const LOAN_LABEL: Record<string, string> = { emergency: 'Emergency', personal: 'Personal', business: 'Business', housing: 'Housing', asset: 'Asset acquisition', education: 'Education' };
 export const CATEGORY_LABEL: Record<string, string> = { real_estate: 'Real estate', treasury_bills: 'Treasury bills', agriculture: 'Agriculture', equipment_leasing: 'Equipment leasing', business_financing: 'Business financing' };
 
-/** Monthly annuity payment, mirrors the server's schedule maths (estimate only). */
-export function monthlyPayment(principal: number, annualPct: number, months: number) {
-  const r = annualPct / 100 / 12; if (!months) return 0;
-  return r === 0 ? principal / months : (principal * r) / (1 - Math.pow(1 + r, -months));
-}
 export function toCsv(rows: Record<string, unknown>[]) {
   if (!rows.length) return '';
   const cols = Object.keys(rows[0]!);

@@ -39,19 +39,19 @@ export default function Savings() {
       <Link to="/statements"><Button variant="outline" icon={<Download size={16} />}>Statement</Button></Link></>} />
     <FinancialCard label="Current balance" total={naira(s.balance)} caption="Available balance"
       breakdown={[{ label: 'Available balance', value: naira(s.balance) }, { label: 'Pending deposits', value: naira(s.pendingDeposits), hint: 'Not yet in your balance' }, { label: 'Total balance', value: naira(s.balance + s.pendingDeposits), hint: 'Available + pending' }]} />
-    <div className="mt-5 grid gap-4 sm:grid-cols-2"><StatCard icon={<PiggyBank size={20} />} label="Total contributions" value={naira(s.totalContributions)} hint="Everything you have paid in" />
-      <StatCard icon={<Sparkles size={20} />} tone="success" label="Interest & returns" value={naira(s.returns)} hint="Confirmed amounts paid to savings" /></div>
+    <div className="mt-5 grid gap-4 sm:grid-cols-2"><StatCard icon={<PiggyBank size={20} />} sensitive label="Total contributions" value={naira(s.totalContributions)} hint="Everything you have paid in" />
+      <StatCard icon={<Sparkles size={20} />} tone="success" sensitive label="Investment returns" value={naira(s.returns)} hint="Confirmed payouts credited to savings" /></div>
     <div className="mt-5 grid gap-5 lg:grid-cols-3"><Card className="h-fit lg:col-span-1"><CardHeader title="Monthly savings goal" action={<Button size="sm" variant="outline" icon={<Target size={15} />} onClick={() => { setGAmt(s.monthlyTarget || ''); setGoal(true); }}>{s.monthlyTarget ? 'Edit' : 'Set goal'}</Button>} />
       {s.monthlyTarget ? <><p className="num text-2xl font-bold">{naira(monthTotal)}<span className="text-base font-medium text-muted"> / {naira(s.monthlyTarget, { decimals: false })}</span></p>
         <div className="mt-3"><ProgressBar value={goalPct} label="Monthly contribution progress" tone={goalPct >= 100 ? 'success' : 'brand'} /></div>
         <p className="mt-3 text-sm text-muted">{goalPct >= 100 ? 'Goal reached this month. Well done!' : `${naira(s.monthlyTarget - monthTotal)} to go this month.`}</p>
         <div className="mt-4 rounded-xl bg-surface2 p-3 text-sm"><p className="text-muted">Next contribution due</p><p className="font-semibold">{date(nextDue)}</p></div></>
         : <p className="text-sm text-muted">Set a monthly goal to track your progress and see when your next contribution is due.</p>}</Card>
-      <div className="lg:col-span-2"><ChartCard title="Balance over time" subtitle="Last 12 months" empty={!ledger.length} chart={{ kind: 'area', data: bal, x: 'month', series: [{ key: 'balance', label: 'Balance' }], money: true }} /></div></div>
-    <div className="mt-5"><ChartCard title="Contributions" subtitle="Deposits per month, last 6 months" height={200} empty={!contrib.some(c => c.contributions)} chart={{ kind: 'bars', data: contrib, x: 'month', series: [{ key: 'contributions', label: 'Contributions' }], money: true }} /></div>
+      <div className="lg:col-span-2"><ChartCard sensitive title="Balance over time" subtitle="Last 12 months" empty={!ledger.length} chart={{ kind: 'area', data: bal, x: 'month', series: [{ key: 'balance', label: 'Balance' }], money: true }} /></div></div>
+    <div className="mt-5"><ChartCard sensitive title="Contributions" subtitle="Deposits per month, last 6 months" height={200} empty={!contrib.some(c => c.contributions)} chart={{ kind: 'bars', data: contrib, x: 'month', series: [{ key: 'contributions', label: 'Contributions' }], money: true }} /></div>
     <div className="mt-5"><TableCard><div className="px-5 pt-5"><h2 className="text-base font-semibold">Contribution history</h2></div>
       <FilterBar actions={(type || from || to) ? <Button size="sm" variant="ghost" onClick={() => { setType(''); setFrom(''); setTo(''); }}>Clear filters</Button> : undefined}>
-        <div className="sm:w-52"><Select aria-label="Transaction type" value={type} onChange={e => setType(e.target.value)}><option value="">All types</option>{['topup', 'contribution', 'withdrawal', 'interest', 'investment_subscription', 'investment_return'].map(t => <option key={t} value={t}>{TXN_LABEL[t]}</option>)}</Select></div>
+        <div className="sm:w-52"><Select aria-label="Transaction type" value={type} onChange={e => setType(e.target.value)}><option value="">All types</option>{['topup', 'contribution', 'withdrawal', 'investment_subscription', 'investment_return'].map(t => <option key={t} value={t}>{TXN_LABEL[t]}</option>)}</Select></div>
         <div className="sm:w-44"><DatePicker aria-label="From date" value={from} onChange={e => setFrom(e.target.value)} /></div><div className="sm:w-44"><DatePicker aria-label="To date" value={to} onChange={e => setTo(e.target.value)} /></div></FilterBar>
       <TransactionTable rows={filtered} loading={tx.loading} /></TableCard></div>
     {pay && <PayModal purpose="topup" title="Add money" onClose={close} />}

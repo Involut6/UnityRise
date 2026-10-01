@@ -8,8 +8,8 @@ import { api, invalidate, useApi } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, titleCase } from '../../lib/format';
 
-const ROLES = ['member', 'loan_officer', 'accountant', 'admin'];
-const MATRIX: [string, string][] = [['Member', 'Own wallet, loans, investments and votes'], ['Loan officer', 'Review and approve loans (two approvals needed)'], ['Accountant', 'Disburse loans, view payments, transactions, reports; declare investment maturity'], ['Admin', 'KYC approval, schemes, communication, governance, audit logs, settings'], ['Super admin', 'Everything, including assigning roles']];
+const ROLES = ['member', 'loan_manager', 'accountant', 'admin'];
+const MATRIX: [string, string][] = [['Member', 'Own wallet, loans, investments and votes'], ['Loan manager', 'Give final approval or rejection on loan applications (with the super admin)'], ['Accountant', 'Disburse loans, view payments, transactions, reports; declare investment maturity'], ['Admin', 'KYC approval, schemes, communication, governance, audit logs, settings. Cannot approve loans'], ['Super admin', 'Everything, including assigning roles']];
 export default function Users() {
   const { me } = useAuth(); const [q, setQ] = useState(''); const u = useApi<any[]>(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`); const confirm = useConfirm(); const [run] = useAction(() => invalidate('/admin/users'));
   const setRole = async (x: any, role: string) => { const c = await confirm({ title: 'Change role?', message: <>Change <b className="text-ink">{x.email}</b> from {titleCase(x.role)} to <b className="text-ink">{titleCase(role)}</b>? Their access changes immediately.</>, confirmLabel: 'Change role' }); if (c.ok) run(() => api('PUT', `/admin/users/${x.id}/role`, { role }), 'Role updated'); };

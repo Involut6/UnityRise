@@ -19,13 +19,25 @@ export async function applyRepayment(q: Q, loanId: string, amount: number) {
   let left = amount;
   const rows = await q('select * from loan_schedule where loan_id=$1 order by installment_no for update', [loanId]);
   for (const r of rows) {
-    const owed = money(Number(r.principal_due) + Number(r.interest_due) + Number(r.penalty) - Number(r.paid));
+    const owed = money(Number(r.principal_due) + Number(r.penalty) - Number(r.paid));
     if (owed <= 0 || left <= 0) continue;
     const pay = Math.min(owed, left);
     await q('update loan_schedule set paid=paid+$2 where id=$1', [r.id, pay]);
     left = money(left - pay);
   }
-  const [o] = await q('select count(*) n from loan_schedule where loan_id=$1 and paid < principal_due+interest_due+penalty', [loanId]);
+  const [o] = await q('select count(*) n from loan_schedule where loan_id=$1 and paid < principal_due+penalty', [loanId]);
   if (Number(o.n) === 0) await q("update loans set status='completed' where id=$1", [loanId]);
   return money(amount - left);
+}
+
+/**
+ * A member's commitment to the cooperative: savings balance plus money currently invested in live schemes.
+ * Loan limits are a multiple of this figure. `contributionMonths` (of the last 6) is shown to approvers as context.
+ */
+export async function commitment(q: Q, memberId: string) {
+  const savings = await savingsBalance(q, memberId);
+  const [i] = await q("select coalesce(sum(x.amount),0) v from investment_subscriptions x join investment_schemes s on s.id=x.scheme_id where x.member_id=$1 and s.status<>'matured'", [memberId]);
+  const [c] = await q("select count(distinct to_char(created_at,'YYYY-MM')) n from transactions where member_id=$1 and type in ('contribution','topup') and created_at > now() - interval '6 months'", [memberId]);
+  const invested = money(i.v);
+  return { savings, invested, commitment: money(savings + invested), contributionMonths: Number(c.n) };
 }

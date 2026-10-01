@@ -5,26 +5,20 @@ import { randomUUID } from 'crypto';
 import { Db, Q } from '../common/db';
 import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
 import { ConsentDto, KycDocDto, LoanApplyDto, ReviewDto } from '../common/dto';
-import { money, notify, postTxn, savingsBalance } from '../common/ledger';
+import { commitment, money, notify, postTxn, savingsBalance } from '../common/ledger';
 
-const REQUIRED_APPROVALS = 2;       // multi-level authorisation: two distinct staff approvals
-const PENALTY_RATE = 0.05;          // 5% of the overdue instalment, applied once
+const PENALTY_RATE = 0.05;          // one-time late-payment penalty: 5% of the overdue instalment (not interest)
 
 /**
- * Reducing-balance equal-instalment (annuity) schedule. Computed in integer kobo so no float error accumulates;
- * interest is rounded half-up per period and the final instalment absorbs any remainder, so principals sum exactly.
+ * Interest-free schedule: equal monthly instalments. Computed in integer kobo; the final instalment absorbs any remainder,
+ * so the instalments always sum exactly to the loan amount.
  */
-export function buildSchedule(principal: number, annualPct: number, months: number, start = new Date()) {
-  const total = Math.round(principal * 100);
-  const r = annualPct / 100 / 12;
-  const pmt = r === 0 ? total / months : (total * r) / (1 - Math.pow(1 + r, -months));
-  let bal = total; const rows = [];
+export function buildSchedule(principal: number, months: number, start = new Date()) {
+  const total = Math.round(principal * 100); const base = Math.floor(total / months); const rows = [];
   for (let i = 1; i <= months; i++) {
-    const interest = Math.round(bal * r);
-    const prin = i === months ? bal : Math.min(bal, Math.round(pmt) - interest);
-    bal -= prin;
+    const prin = i === months ? total - base * (months - 1) : base;
     const due = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, Math.min(start.getUTCDate(), 28)));
-    rows.push({ no: i, due: due.toISOString().slice(0, 10), principal: prin / 100, interest: interest / 100 });
+    rows.push({ no: i, due: due.toISOString().slice(0, 10), principal: prin / 100 });
   }
   return rows;
 }
@@ -44,15 +38,15 @@ export class LoansService {
       if (d.tenorMonths > p.max_tenor_months) throw new BadRequestException(`Maximum tenor is ${p.max_tenor_months} months`);
       const [open] = await q("select count(*) n from loans where member_id=$1 and status in ('guarantors_pending','under_review','approved','active','defaulted')", [u.memberId]);
       if (Number(open.n) > 0) throw new BadRequestException('You already have an open loan or application');
-      const bal = await savingsBalance(q, u.memberId!);
-      const limit = money(bal * Number(p.max_multiple_of_savings));
-      if (d.principal > limit) throw new BadRequestException(`Eligibility: maximum for this product is ₦${limit.toLocaleString()} (${p.max_multiple_of_savings}× your savings)`);
+      const c = await commitment(q, u.memberId!);
+      const limit = money(c.commitment * Number(p.max_multiple_of_savings));
+      if (d.principal > limit) throw new BadRequestException(`Eligibility: maximum for this loan is ₦${limit.toLocaleString()} (${p.max_multiple_of_savings}× your savings and investments of ₦${c.commitment.toLocaleString()})`);
       const ids = [...new Set(d.guarantorMembershipIds)];
       if (ids.length < 2) throw new BadRequestException('Two distinct guarantors required');
       const gs = await q("select id from members where membership_id = any($1) and kyc_status='approved' and id<>$2", [ids, u.memberId]);
       if (gs.length !== ids.length) throw new BadRequestException('Guarantors must be other approved members');
-      const [loan] = await q('insert into loans(member_id,product_code,principal,tenor_months,annual_rate_pct,purpose) values($1,$2,$3,$4,$5,$6) returning *',
-        [u.memberId, p.code, d.principal, d.tenorMonths, p.annual_rate_pct, d.purpose ?? null]);
+      const [loan] = await q('insert into loans(member_id,product_code,principal,tenor_months,purpose) values($1,$2,$3,$4,$5) returning *',
+        [u.memberId, p.code, d.principal, d.tenorMonths, d.purpose ?? null]);
       for (const g of gs) {
         await q('insert into loan_guarantors(loan_id,member_id) values($1,$2)', [loan.id, g.id]);
         await notify(q, g.id, 'Guarantor request', `${m.first_name} ${m.last_name} asked you to guarantee a ₦${d.principal.toLocaleString()} loan.`);
@@ -64,9 +58,9 @@ export class LoansService {
     if (!u.memberId) throw new ForbiddenException();
     const [p] = await this.db.q('select * from loan_products where code=$1', [code]);
     if (!p) throw new NotFoundException();
-    const bal = await savingsBalance(this.db.q, u.memberId);
+    const c = await commitment(this.db.q, u.memberId);
     const [open] = await this.db.q("select count(*) n from loans where member_id=$1 and status in ('guarantors_pending','under_review','approved','active','defaulted')", [u.memberId]);
-    return { savings: bal, maxAmount: money(bal * Number(p.max_multiple_of_savings)), maxTenor: p.max_tenor_months, annualRatePct: Number(p.annual_rate_pct), hasOpenLoan: Number(open.n) > 0 };
+    return { ...c, multiple: Number(p.max_multiple_of_savings), maxAmount: money(c.commitment * Number(p.max_multiple_of_savings)), maxTenor: p.max_tenor_months, hasOpenLoan: Number(open.n) > 0 };
   }
   async addDocument(u: AuthUser, id: string, d: KycDocDto) {
     const l = await this.db.one('select id from loans where id=$1 and member_id=$2', [id, u.memberId]);
@@ -83,11 +77,12 @@ export class LoansService {
     if (!l) throw new NotFoundException();
     return {
       ...l,
-      savings: await savingsBalance(this.db.q, l.member_pk),
+      ...(await commitment(this.db.q, l.member_pk)),
+      multiple: Number((await this.db.one('select max_multiple_of_savings m from loan_products where code=$1', [l.product_code])).m),
       guarantors: await this.db.q('select m.first_name,m.last_name,m.membership_id,g.consent from loan_guarantors g join members m on m.id=g.member_id where g.loan_id=$1', [id]),
       approvalsLog: await this.db.q('select u.email,a.decision,a.note,a.created_at from loan_approvals a join users u on u.id=a.approver_id where a.loan_id=$1 order by a.created_at', [id]),
       documents: await this.db.q('select id,filename,created_at from loan_documents where loan_id=$1', [id]),
-      schedule: await this.db.q('select installment_no,due_date,principal_due,interest_due,penalty,paid from loan_schedule where loan_id=$1 order by installment_no', [id]),
+      schedule: await this.db.q('select installment_no,due_date,principal_due,penalty,paid from loan_schedule where loan_id=$1 order by installment_no', [id]),
     };
   }
   async file(id: string, docId: string) {
@@ -136,11 +131,10 @@ export class LoansService {
         await notify(q, loan.member_id, 'Loan rejected', d.note ?? 'Your loan was not approved.');
         return { status: 'rejected' };
       }
-      const [{ n }] = await q("select count(*) n from loan_approvals where loan_id=$1 and decision='approve'", [id]);
-      const done = Number(n) >= REQUIRED_APPROVALS;
-      await q('update loans set approvals=$2,status=$3 where id=$1', [id, n, done ? 'approved' : 'under_review']);
-      if (done) await notify(q, loan.member_id, 'Loan approved', 'Your loan is approved and awaiting disbursement.');
-      return { status: done ? 'approved' : 'under_review', approvals: Number(n) };
+      // One decision from an authorised approver (loan manager or super admin) is final.
+      await q("update loans set approvals=1,status='approved' where id=$1", [id]);
+      await notify(q, loan.member_id, 'Loan approved', 'Your loan is approved and awaiting disbursement.');
+      return { status: 'approved' };
     });
   }
   /** Disbursement: records the payout (bank transfer via NIP to be wired in) and generates the schedule. */
@@ -149,8 +143,8 @@ export class LoansService {
       const [loan] = await q('select * from loans where id=$1 for update', [id]);
       if (!loan) throw new NotFoundException();
       if (loan.status !== 'approved') throw new BadRequestException('Loan is not approved');
-      const sched = buildSchedule(Number(loan.principal), Number(loan.annual_rate_pct), loan.tenor_months);
-      for (const s of sched) await q('insert into loan_schedule(loan_id,installment_no,due_date,principal_due,interest_due) values($1,$2,$3,$4,$5)', [id, s.no, s.due, s.principal, s.interest]);
+      const sched = buildSchedule(Number(loan.principal), loan.tenor_months);
+      for (const s of sched) await q('insert into loan_schedule(loan_id,installment_no,due_date,principal_due) values($1,$2,$3,$4)', [id, s.no, s.due, s.principal]);
       await q("update loans set status='active',disbursed_at=now() where id=$1", [id]);
       await postTxn(q, { memberId: loan.member_id, type: 'loan_disbursement', amount: Number(loan.principal), direction: 1, affectsSavings: false, reference: `DISB-${id}`, narration: 'Loan disbursement' });
       await notify(q, loan.member_id, 'Loan disbursed', `₦${Number(loan.principal).toLocaleString()} has been disbursed.`);
@@ -160,20 +154,20 @@ export class LoansService {
   async schedule(u: AuthUser, id: string, staff = false) {
     const l = await this.db.one('select member_id from loans where id=$1', [id]);
     if (!l || (!staff && l.member_id !== u.memberId)) throw new NotFoundException();
-    return this.db.q('select installment_no,due_date,principal_due,interest_due,penalty,paid from loan_schedule where loan_id=$1 order by installment_no', [id]);
+    return this.db.q('select installment_no,due_date,principal_due,penalty,paid from loan_schedule where loan_id=$1 order by installment_no', [id]);
   }
   /** Apply a one-off late penalty to overdue instalments. Run daily by a scheduler / admin. */
   async runPenalties() {
-    const r = await this.db.q(`update loan_schedule s set penalty = round((principal_due+interest_due)*$1,2)
-      where penalty=0 and due_date < current_date and paid < principal_due+interest_due returning loan_id`, [PENALTY_RATE]);
+    const r = await this.db.q(`update loan_schedule s set penalty = round(principal_due*$1,2)
+      where penalty=0 and due_date < current_date and paid < principal_due returning loan_id`, [PENALTY_RATE]);
     return { penalised: r.length };
   }
   /** Reminders 7/3/1 days before due date, delivered as in-app notifications (SMS/email adapters plug in here). */
   async runReminders() {
     const r = await this.db.q(`insert into notifications(member_id,title,body)
-      select l.member_id,'Repayment reminder','Instalment '||s.installment_no||' of ₦'||(s.principal_due+s.interest_due-s.paid)||' is due on '||s.due_date
+      select l.member_id,'Repayment reminder','Instalment '||s.installment_no||' of ₦'||(s.principal_due-s.paid)||' is due on '||s.due_date
       from loan_schedule s join loans l on l.id=s.loan_id
-      where l.status='active' and s.paid < s.principal_due+s.interest_due and (s.due_date - current_date) in (7,3,1) returning 1`);
+      where l.status='active' and s.paid < s.principal_due and (s.due_date - current_date) in (7,3,1) returning 1`);
     return { sent: r.length };
   }
 }
@@ -184,8 +178,8 @@ export class LoansController {
   @Post() apply(@CurrentUser() u: AuthUser, @Body() d: LoanApplyDto) { return this.s.apply(u, d); }
   @Get('eligibility') elig(@CurrentUser() u: AuthUser, @Query('productCode') c: string) { return this.s.eligibility(u, c); }
   @Post(':id/documents') doc(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: KycDocDto) { return this.s.addDocument(u, id, d); }
-  @Roles('loan_officer', 'accountant', 'admin') @Get(':id/detail') detail(@Param('id', ParseUUIDPipe) id: string) { return this.s.detail(id); }
-  @Roles('loan_officer', 'accountant', 'admin') @Get(':id/documents/:docId/file')
+  @Roles('loan_manager', 'accountant', 'admin') @Get(':id/detail') detail(@Param('id', ParseUUIDPipe) id: string) { return this.s.detail(id); }
+  @Roles('loan_manager', 'accountant', 'admin') @Get(':id/documents/:docId/file')
   async lfile(@Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string, @Res({ passthrough: true }) res: any) {
     const f = await this.s.file(id, docId);
     res.set({ 'Content-Type': f.type, 'Content-Disposition': `inline; filename="${encodeURIComponent(f.name)}"`, 'Cache-Control': 'private, no-store' });
@@ -195,9 +189,9 @@ export class LoansController {
   @Get('guarantee-requests') gr(@CurrentUser() u: AuthUser) { return this.s.guaranteeRequests(u); }
   @Post(':id/consent') consent(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ConsentDto) { return this.s.consent(u, id, d); }
   @Get(':id/schedule') sched(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.schedule(u, id); }
-  @Roles('loan_officer', 'accountant', 'admin') @Get('all') all(@Query('status') s?: string) { return this.s.all(s); }
-  @Roles('loan_officer', 'accountant', 'admin') @Get('queue') queue() { return this.s.queue(); }
-  @Roles('loan_officer', 'admin') @Post(':id/review') review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ReviewDto) { return this.s.review(u, id, d); }
+  @Roles('loan_manager', 'accountant', 'admin') @Get('all') all(@Query('status') s?: string) { return this.s.all(s); }
+  @Roles('loan_manager', 'accountant', 'admin') @Get('queue') queue() { return this.s.queue(); }
+  @Roles('loan_manager') @Post(':id/review') review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ReviewDto) { return this.s.review(u, id, d); }
   @Roles('accountant', 'admin') @Post(':id/disburse') disburse(@Param('id', ParseUUIDPipe) id: string) { return this.s.disburse(id); }
   @Roles('admin') @Post('jobs/penalties') pen() { return this.s.runPenalties(); }
   @Roles('admin') @Post('jobs/reminders') rem() { return this.s.runReminders(); }

@@ -7,6 +7,7 @@ import { Drawer, Modal } from '../ui/overlay';
 import { useAuth } from '../../lib/auth';
 import { useApi } from '../../lib/api';
 import { ThemeToggle } from '../../lib/theme';
+import { BalanceToggle } from '../../lib/privacy';
 import { date, titleCase } from '../../lib/format';
 
 const Logo = ({ small }: { small?: boolean }) => <Link to="/" className="flex items-center gap-2.5 font-bold" aria-label="UnityRise home">
@@ -90,6 +91,7 @@ function Topbar({ mode, unread }: { mode: 'member' | 'admin'; unread: number }) 
   return <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur md:px-8">
     <div className="md:hidden"><Logo /></div><div className="flex-1" />
     {canSwitch && <Button size="sm" variant="outline" icon={<Repeat size={15} />} onClick={() => nav(mode === 'admin' ? '/' : '/admin')}><span className="hidden sm:inline">{mode === 'admin' ? 'Member portal' : 'Admin'}</span></Button>}
+    {mode === 'member' && <BalanceToggle />}
     <ThemeToggle />
     <button onClick={() => setPanel(true)} className="relative grid size-10 place-items-center rounded-full text-muted hover:bg-surface2 hover:text-ink" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}>
       <Bell size={21} />{unread > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-white num">{unread > 9 ? '9+' : unread}</span>}</button>

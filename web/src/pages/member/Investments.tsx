@@ -19,9 +19,9 @@ export default function Investments() {
   const chip = (on: boolean) => `h-9 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap ${on ? 'border-brand bg-brand-soft text-brand' : 'border-line-strong hover:bg-surface2'}`;
   return <>
     <PageHeader title="Investments" description="Cooperative schemes you can invest in from your savings." />
-    <div className="grid gap-4 sm:grid-cols-3"><StatCard icon={<Layers size={20} />} label="Currently invested" value={naira(summary.invested)} hint={`${summary.count} investment${summary.count === 1 ? '' : 's'} in total`} />
-      <StatCard icon={<PieChart size={20} />} tone="info" label="Projected value" value={naira(summary.projected)} hint="Estimate at projected returns, not guaranteed" />
-      <StatCard icon={<TrendingUp size={20} />} tone="success" label="Confirmed payouts" value={naira(summary.confirmed)} hint="Actually paid out at maturity" /></div>
+    <div className="grid gap-4 sm:grid-cols-3"><StatCard icon={<Layers size={20} />} sensitive label="Currently invested" value={naira(summary.invested)} hint={`${summary.count} investment${summary.count === 1 ? '' : 's'} in total`} />
+      <StatCard icon={<PieChart size={20} />} tone="info" sensitive label="Projected value" value={naira(summary.projected)} hint="Estimate at projected returns, not guaranteed" />
+      <StatCard icon={<TrendingUp size={20} />} tone="success" sensitive label="Confirmed payouts" value={naira(summary.confirmed)} hint="Actually paid out at maturity" /></div>
     <div className="mb-5 mt-6 grid gap-3"><div className="flex flex-wrap gap-2" role="group" aria-label="Status">{[['open', 'Open'], ['closed', 'Fully subscribed'], ['matured', 'Matured'], ['', 'All']].map(([k, l]) => <button key={k} onClick={() => setStatus(k!)} aria-pressed={status === k} className={chip(status === k)}>{l}</button>)}</div>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Category"><button onClick={() => setCat('')} aria-pressed={!cat} className={chip(!cat)}>All types</button>{Object.entries(CATEGORY_LABEL).map(([k, l]) => <button key={k} onClick={() => setCat(k)} aria-pressed={cat === k} className={chip(cat === k)}>{l}</button>)}</div></div>
     {!shown.length ? <Card><EmptyState icon={<TrendingUp size={22} />} title="No schemes match" description="There are no investment schemes in this view right now." /></Card> :

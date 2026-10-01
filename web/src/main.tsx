@@ -3,9 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './lib/auth';
+import { PrivacyProvider } from './lib/privacy';
 import { ConfirmProvider, ToastProvider } from './components/ui/overlay';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><BrowserRouter><ToastProvider><ConfirmProvider><AuthProvider><App /></AuthProvider></ConfirmProvider></ToastProvider></BrowserRouter></StrictMode>,
+  <StrictMode><BrowserRouter><ToastProvider><ConfirmProvider><AuthProvider><PrivacyProvider><App /></PrivacyProvider></AuthProvider></ConfirmProvider></ToastProvider></BrowserRouter></StrictMode>,
 );

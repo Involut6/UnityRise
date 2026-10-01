@@ -30,15 +30,15 @@ const ok=(n,c,x)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(x)
  console.log(await call('POST',`/loans/${loan.id}/consent`,bola,{consent:'accepted'}));await call('POST',`/loans/${loan.id}/consent`,chi,{consent:'accepted'});
  ok('under review',(await call('GET','/loans/mine',ada)).j[0].status==='under_review');
  ok('member cannot approve',(await call('POST',`/loans/${loan.id}/review`,ada,{decision:'approve'})).s===403);
- ok('1st approval',(await call('POST',`/loans/${loan.id}/review`,adm,{decision:'approve'})).j.status==='under_review');
- ok('same approver twice blocked',(await call('POST',`/loans/${loan.id}/review`,adm,{decision:'approve'})).s===400);
- // promote chi's... use super admin only; need 2nd staff -> create via role change
- const me=(await call('GET','/auth/me',bola)).j;await call('PUT',`/admin/users/${me.id}/role`,adm,{role:'loan_officer'});
- ok('2nd approval',(await call('POST',`/loans/${loan.id}/review`,bola,{decision:'approve'})).j.status==='approved');
+ const me=(await call('GET','/auth/me',bola)).j;
+ ok('loan manager role can be assigned',(await call('PUT',`/admin/users/${me.id}/role`,adm,{role:'loan_manager'})).s<300);
+ const el=(await call('GET','/loans/eligibility?productCode=personal',ada)).j;
+ ok('eligibility = multiple x (savings + investments)',el.commitment===el.savings+el.invested&&el.maxAmount===el.commitment*el.multiple,el);
+ ok('loan manager approves (single final approval)',(await call('POST',`/loans/${loan.id}/review`,bola,{decision:'approve'})).j.status==='approved');
  ok('disburse',(await call('POST',`/loans/${loan.id}/disburse`,adm)).j.installments===6);
  const sch=(await call('GET',`/loans/${loan.id}/schedule`,ada)).j;
  const tot=sch.reduce((a,r)=>a+Number(r.principal_due),0);ok('schedule principal sums',Math.abs(tot-150000)<0.01,tot);
- const pi=(await call('POST','/payments/initiate',ada,{provider:'paystack',purpose:'loan_repayment',amount:Number(sch[0].principal_due)+Number(sch[0].interest_due),loanId:loan.id})).j;
+ const pi=(await call('POST','/payments/initiate',ada,{provider:'paystack',purpose:'loan_repayment',amount:Number(sch[0].principal_due),loanId:loan.id})).j;
  await call('POST',`/payments/${pi.reference}/simulate`,ada);
  ok('repayment applied',Number((await call('GET',`/loans/${loan.id}/schedule`,ada)).j[0].paid)>0);
  ok('webhook w/o signature rejected',(await call('POST','/payments/webhook/paystack',null,{data:{reference:pi.reference,status:'success'}})).s===401);

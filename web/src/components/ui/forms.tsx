@@ -1,16 +1,13 @@
-import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, useEffect, useId, useRef, useState } from 'react';
 import { CheckCircle2, FileUp, Search, Upload, X } from 'lucide-react';
 import { cn } from './primitives';
+import { FieldCtx, useField } from './field';
+export { Select, DatePicker, DateTimePicker } from './pickers';
 
 const base = 'w-full rounded-lg border bg-surface px-3 text-[15px] text-ink placeholder:text-muted/70 transition focus:border-brand focus:outline-none focus:ring-3 focus:ring-brand/20 disabled:bg-surface2 disabled:text-muted';
 const state = (err?: boolean) => (err ? 'border-danger' : 'border-line-strong');
 
-/** FormField publishes the control's id / description / invalid state here, so wrapped inputs are still labelled correctly. */
-const FieldCtx = createContext<{ id: string; describedBy?: string; invalid: boolean } | null>(null);
-const useField = (p: { id?: string; invalid?: boolean; 'aria-describedby'?: string }) => { const f = useContext(FieldCtx); const invalid = p.invalid ?? f?.invalid; return { id: p.id ?? f?.id, 'aria-describedby': p['aria-describedby'] ?? f?.describedBy, 'aria-invalid': invalid || undefined, invalid }; };
-
 export const Input = ({ invalid: _i, className, ...p }: InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) => { const f = useField({ ...p, invalid: _i }); return <input className={cn(base, state(f.invalid), 'h-11 md:h-10', className)} {...p} id={f.id} aria-describedby={f['aria-describedby']} aria-invalid={f['aria-invalid']} />; };
-export const Select = ({ invalid: _i, className, children, ...p }: SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) => { const f = useField({ ...p, invalid: _i }); return <select className={cn(base, state(f.invalid), 'h-11 md:h-10 pr-8', className)} {...p} id={f.id} aria-describedby={f['aria-describedby']} aria-invalid={f['aria-invalid']}>{children}</select>; };
 export const Textarea = ({ invalid: _i, className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }) => { const f = useField({ ...p, invalid: _i }); return <textarea className={cn(base, state(f.invalid), 'min-h-24 py-2.5', className)} {...p} id={f.id} aria-describedby={f['aria-describedby']} aria-invalid={f['aria-invalid']} />; };
 
 /** Label + control + hint/error wired together for screen readers. */
@@ -27,7 +24,6 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', classN
   return <div className={cn('relative', className)}><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden />
     <Input type="search" aria-label={placeholder} placeholder={placeholder} value={v} className="pl-9" onChange={e => { setV(e.target.value); clearTimeout(t.current); t.current = setTimeout(() => onChange(e.target.value), 250); }} /></div>;
 }
-export const DatePicker = ({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) => <Input type="date" className={cn('min-w-0', className)} {...p} />;
 
 /** ₦-prefixed numeric input. Emits a number (or NaN when empty). */
 export function MoneyInput({ value, onChange, ...p }: { value: number | ''; onChange: (n: number | '') => void } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
