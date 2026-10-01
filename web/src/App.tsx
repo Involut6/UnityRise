@@ -16,7 +16,7 @@ const Notifications = L(() => import('./pages/member/Notifications')); const Gov
 const Profile = L(() => import('./pages/member/Profile')); const Help = L(() => import('./pages/member/Help')); const Verification = L(() => import('./pages/member/Verification'));
 const AdminDashboard = L(() => import('./pages/admin/Dashboard')); const Members = L(() => import('./pages/admin/Members')); const MemberDetail = L(() => import('./pages/admin/MemberDetail'));
 const Kyc = L(() => import('./pages/admin/Kyc')); const AdminSavings = L(() => import('./pages/admin/Savings')); const AdminLoans = L(() => import('./pages/admin/Loans'));
-const AdminInvestments = L(() => import('./pages/admin/Investments')); const Payments = L(() => import('./pages/admin/Payments')); const AdminTransactions = L(() => import('./pages/admin/Transactions'));
+const AdminInvestments = L(() => import('./pages/admin/Investments')); const AdminInvestmentDetail = L(() => import('./pages/admin/InvestmentDetail')); const Payments = L(() => import('./pages/admin/Payments')); const AdminTransactions = L(() => import('./pages/admin/Transactions'));
 const Reports = L(() => import('./pages/admin/Reports')); const Communication = L(() => import('./pages/admin/Communication')); const AdminGovernance = L(() => import('./pages/admin/Governance'));
 const Documents = L(() => import('./pages/admin/Documents')); const Users = L(() => import('./pages/admin/Users')); const Audit = L(() => import('./pages/admin/Audit')); const Settings = L(() => import('./pages/admin/Settings'));
 
@@ -47,7 +47,7 @@ export default function App() {
     <Route path="admin" element={<StaffGate><AppShell mode="admin" /></StaffGate>}>
       <Route index element={E(AdminDashboard)} /><Route path="members" element={E(Members)} /><Route path="members/:id" element={E(MemberDetail)} />
       <Route path="kyc" element={E(Kyc, ['admin'])} /><Route path="users" element={E(Users, ['super_admin'])} /><Route path="savings" element={E(AdminSavings, ['admin', 'accountant'])} />
-      <Route path="loans" element={E(AdminLoans, ['loan_manager', 'accountant', 'admin'])} /><Route path="investments" element={E(AdminInvestments, ['admin', 'accountant'])} />
+      <Route path="loans" element={E(AdminLoans, ['loan_manager', 'accountant', 'admin'])} /><Route path="investments" element={E(AdminInvestments, ['admin', 'accountant'])} /><Route path="investments/:id" element={E(AdminInvestmentDetail, ['admin', 'accountant'])} />
       <Route path="payments" element={E(Payments, ['admin', 'accountant'])} /><Route path="transactions" element={E(AdminTransactions, ['admin', 'accountant'])} />
       <Route path="reports" element={E(Reports, ['admin', 'accountant'])} /><Route path="communication" element={E(Communication, ['admin'])} /><Route path="governance" element={E(AdminGovernance, ['admin'])} />
       <Route path="documents" element={E(Documents, ['admin'])} /><Route path="audit" element={E(Audit, ['admin'])} /><Route path="settings" element={E(Settings, ['admin'])} />

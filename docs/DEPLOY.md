@@ -6,7 +6,7 @@ Two Vercel projects from this one repo: the **API** (`api/`) and the **web app**
 Vercel does not run migrations. From `api/` with your Neon **direct** connection string:
 ```powershell
 $env:DATABASE_URL = "<neon connection string>"
-npm run migrate          # applies db/001 … 005 (runs db/migrate.cjs)
+npm run migrate          # applies db/001 … 006 (runs db/migrate.cjs)
 $env:ADMIN_EMAIL = "you@example.com"; $env:ADMIN_PASSWORD = "<12+ chars>"
 npm run seed             # creates / resets the super admin
 ```
@@ -26,7 +26,7 @@ Environment variables (Production):
 | `PAYSTACK_WEBHOOK_SECRET`, `FLUTTERWAVE_WEBHOOK_SECRET` | when you add live gateways |
 | `NODE_ENV` | `production` |
 
-Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,"database":"connected","migrations":5,…}`. If not, it says in words what is wrong (wrong database login, host not found, tables missing, …). A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
+Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,"database":"connected","migrations":6,…}`. If not, it says in words what is wrong (wrong database login, host not found, tables missing, …). A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
 
 ## 2. Web project
 New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add one variable:

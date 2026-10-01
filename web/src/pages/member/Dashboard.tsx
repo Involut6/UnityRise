@@ -26,8 +26,8 @@ export default function Dashboard() {
     <div className="grid gap-5 lg:grid-cols-3">
       <div className="lg:col-span-2"><FinancialCard label="Total savings balance" total={naira(wallet.balance)} caption="Available to use now"
         breakdown={[{ label: 'Available', value: naira(wallet.balance) }, { label: 'Pending deposits', value: naira(wallet.pendingDeposits), hint: 'Awaiting confirmation' }, { label: 'Total contributions', value: naira(wallet.totalContributions), hint: 'All time' }]}
-        actions={<><Button variant="outline" className="border-white/30 bg-white text-brand hover:bg-white/90" icon={<Plus size={16} />} onClick={() => setPay(true)}>Add savings</Button>
-          <Button variant="ghost" className="text-on-brand hover:bg-white/15" onClick={() => nav('/savings')} icon={<ArrowRight size={16} />}>View wallet</Button></>} /></div>
+        actions={<><Button variant="outline" className="border-transparent! bg-on-brand! text-brand! hover:opacity-90" icon={<Plus size={16} />} onClick={() => setPay(true)}>Add savings</Button>
+          <Button variant="ghost" className="text-on-brand! hover:bg-on-brand/15!" onClick={() => nav('/savings')} icon={<ArrowRight size={16} />}>View wallet</Button></>} /></div>
       <Card className="flex flex-col"><CardHeader title="Outstanding obligations" />
         {active ? <div className="flex flex-1 flex-col"><p className="text-sm text-muted">Loan balance · {LOAN_LABEL[active.product_code]}</p><p className="num text-2xl font-bold">{m(x.loanOutstanding)}</p>
           {loanProgress && <div className="mt-3"><div className="mb-1.5 flex justify-between text-xs text-muted"><span>Repaid</span><span className="num">{Math.round(loanProgress.pct)}%</span></div><ProgressBar value={loanProgress.pct} label="Loan repayment progress" tone="success" /></div>}

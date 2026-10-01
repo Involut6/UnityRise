@@ -48,3 +48,8 @@ Deploying on Vercel: see `docs/DEPLOY.md`.
 - The borrowing limit is `multiple × (savings balance + money invested in live schemes)`; the multiple depends on the loan type (`loan_products.max_multiple_of_savings`).
 - Every loan needs guarantor consent, then a decision from a **loan manager or the super admin** (admins cannot approve). The accountant, admin or super admin disburses.
 - UI: members can hide balances with the eye button (remembered per browser); custom select / date / date-time pickers replace the native controls.
+
+## Investment management (super admin)
+- `/admin/investments/:id` is the detailed scheme page (overview, investors, projected vs confirmed returns, lifecycle and change history). Admins and accountants can view it; **only the super admin can edit** (`PATCH /api/investments/:id`, `POST /api/investments/:id/status`).
+- Edit rules: drafts are freely editable; live schemes need a reason, the target cannot drop below the amount already raised, and changes to return/duration/risk/minimum notify investors; matured schemes are financially final (description only). Every edit is stored with before/after values (`investment_scheme_edits`, migration 006).
+- API tests: `node api/test/scheme-admin.cjs`.
