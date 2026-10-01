@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { clientIp } from './ip.js';
 
 const log = new Logger('http');
 
@@ -13,7 +14,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const start = process.hrtime.bigint();
   res.on('finish', () => {
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    const line = JSON.stringify({ requestId: id, method: req.method, path: req.originalUrl.split('?')[0], status: res.statusCode, ms: Math.round(ms), ip: req.ip });
+    const line = JSON.stringify({ requestId: id, method: req.method, path: req.originalUrl.split('?')[0], status: res.statusCode, ms: Math.round(ms), ip: clientIp(req) });
     if (res.statusCode >= 500) log.error(line); else if (res.statusCode >= 400) log.warn(line); else log.log(line);
   });
   next();
