@@ -46,6 +46,7 @@ export class CommunityService {
   createMeeting(u: AuthUser, d: MeetingDto) { return this.db.one('insert into meetings(title,held_at,venue,created_by) values($1,$2,$3,$4) returning *', [d.title, d.heldAt, d.venue ?? null, u.id]); }
   meetings(q?: string) { return this.db.q(`select m.*,(select count(*) from meeting_attendance a where a.meeting_id=m.id) attendees from meetings m
     where ($1::text is null or m.title ilike '%'||$1||'%' or m.minutes ilike '%'||$1||'%') order by held_at desc limit 50`, [q ?? null]); }
+  attendance(id: string) { return this.db.q("select m.first_name,m.last_name,m.membership_id,a.checked_in_at from meeting_attendance a join members m on m.id=a.member_id where a.meeting_id=$1 order by a.checked_in_at", [id]); }
   async setMinutes(id: string, d: MinutesDto) { await this.db.q('update meetings set minutes=$2 where id=$1', [id, d.minutes]); return { ok: true }; }
   async checkIn(u: AuthUser, id: string) {
     await this.approvedMember(u);
@@ -70,6 +71,7 @@ export class CommunityController {
   @Roles('admin') @Post('meetings') mkMeeting(@CurrentUser() u: AuthUser, @Body() d: MeetingDto) { return this.s.createMeeting(u, d); }
   @Get('meetings') meetings(@Query('q') q?: string) { return this.s.meetings(q); }
   @Roles('admin') @Post('meetings/:id/minutes') minutes(@Param('id', ParseUUIDPipe) id: string, @Body() d: MinutesDto) { return this.s.setMinutes(id, d); }
+  @Roles('admin') @Get('meetings/:id/attendance') att(@Param('id', ParseUUIDPipe) id: string) { return this.s.attendance(id); }
   @Post('meetings/:id/checkin') check(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.checkIn(u, id); }
 }
 @Module({ providers: [CommunityService], controllers: [CommunityController] }) export class CommunityModule {}

@@ -1,11 +1,12 @@
 import { Global, Injectable, Module, OnModuleDestroy } from '@nestjs/common';
+import { config } from './config';
 import { Pool, PoolClient } from 'pg';
 
 export type Q = <T = any>(sql: string, params?: any[]) => Promise<T[]>;
 
 @Injectable()
 export class Db implements OnModuleDestroy {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+  pool = new Pool({ connectionString: config().databaseUrl, max: 10 });
   q: Q = async (sql, params) => (await this.pool.query(sql, params)).rows;
   one = async <T = any>(sql: string, params?: any[]) => (await this.q<T>(sql, params))[0];
   /** Run fn in a transaction; fn receives a query function bound to the tx connection. */

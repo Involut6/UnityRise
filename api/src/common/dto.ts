@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ArrayMinSize, ArrayMaxSize } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ArrayMinSize, ArrayMaxSize } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail() email: string;
@@ -16,8 +16,8 @@ export class KycDto {
 }
 export class KycDocDto {
   @IsIn(['photo', 'id_card', 'signature', 'proof_of_address']) kind: string;
-  @IsString() filename: string;
-  @IsString() contentBase64: string;
+  @IsString() @MaxLength(200) filename: string;
+  @IsString() @MaxLength(7_500_000) contentBase64: string;
 }
 export class ReviewDto { @IsIn(['approve', 'reject']) decision: 'approve' | 'reject'; @IsOptional() @IsString() note?: string }
 export class AmountDto { @IsNumber() @Min(100) @Max(100_000_000) amount: number }
@@ -57,3 +57,5 @@ export class PollDto {
 export class VoteDto { @IsInt() @Min(0) optionIndex: number }
 export class MeetingDto { @IsString() title: string; @IsDateString() heldAt: string; @IsOptional() @IsString() venue?: string }
 export class MinutesDto { @IsString() minutes: string }
+
+export class ChangePasswordDto { @IsString() current: string; @IsString() @Length(8, 72) next: string }

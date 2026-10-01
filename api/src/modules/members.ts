@@ -1,7 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, ForbiddenException } from '@nestjs/common';
-import { mkdirSync, writeFileSync } from 'fs';
+import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, ForbiddenException, StreamableFile, Res } from '@nestjs/common';
+import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { extname } from 'path';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { config } from '../common/config';
+import { sniffFile } from '../common/files';
 import { Db } from '../common/db';
 import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
 import { KycDocDto, KycDto, ReviewDto } from '../common/dto';
@@ -22,8 +25,10 @@ export class MembersService {
   async upload(u: AuthUser, d: KycDocDto) {
     const buf = Buffer.from(d.contentBase64, 'base64');
     if (!buf.length || buf.length > 5 * 1024 * 1024) throw new BadRequestException('File must be 1B–5MB');
-    const dir = join(process.env.UPLOAD_DIR ?? 'uploads', this.mid(u)); mkdirSync(dir, { recursive: true });
-    const key = join(dir, `${randomUUID()}.bin`); writeFileSync(key, buf); // swap for S3 in production
+    const type = sniffFile(buf);
+    if (!type) throw new BadRequestException('Only JPEG, PNG or PDF files are accepted');
+    const dir = join(config().uploadDir, this.mid(u)); mkdirSync(dir, { recursive: true });
+    const key = join(dir, `${randomUUID()}.${type.ext}`); writeFileSync(key, buf); // swap for private object storage in production
     await this.db.q('delete from kyc_documents where member_id=$1 and kind=$2', [u.memberId, d.kind]);
     await this.db.q('insert into kyc_documents(member_id,kind,filename,storage_key) values($1,$2,$3,$4)', [u.memberId, d.kind, d.filename.slice(0, 200), key]);
     return { uploaded: d.kind };
@@ -38,12 +43,41 @@ export class MembersService {
     await this.db.q("update members set kyc_status='submitted',kyc_note=null where id=$1 and kyc_status in ('draft','rejected')", [id]);
     return { status: 'submitted' };
   }
-  list(status?: string) {
-    return this.db.q(`select id,membership_id,first_name,last_name,kyc_status,created_at from members
-      where ($1::text is null or kyc_status::text=$1) order by created_at desc limit 200`, [status ?? null]);
+  list(status?: string, q?: string) {
+    return this.db.q(`select m.id,m.membership_id,m.first_name,m.last_name,m.kyc_status,m.created_at,u.email,u.phone,u.is_active,
+        coalesce((select sum(direction*amount) from transactions t where t.member_id=m.id and t.affects_savings),0) savings,
+        (select status from loans l where l.member_id=m.id order by created_at desc limit 1) loan_status
+      from members m join users u on u.id=m.user_id
+      where ($1::text is null or m.kyc_status::text=$1)
+        and ($2::text is null or (m.first_name||' '||m.last_name||' '||coalesce(m.membership_id,'')||' '||u.email) ilike '%'||$2||'%')
+      order by m.created_at desc limit 500`, [status ?? null, q ?? null]);
+  }
+  /** Lets a member find a guarantor by Membership ID without exposing more than a short display name. */
+  async lookup(u: AuthUser, mid: string) {
+    const m = await this.db.one("select id,first_name,last_name from members where membership_id=$1 and kyc_status='approved' and id<>$2", [mid.toUpperCase(), u.memberId]);
+    if (!m) throw new NotFoundException('No approved member with that ID');
+    return { name: `${m.first_name} ${m.last_name[0]}.` };
+  }
+  async full(id: string) {
+    const m = await this.detail(id);
+    const savings = (await this.db.one('select coalesce(sum(direction*amount),0) b from transactions where member_id=$1 and affects_savings', [id])).b;
+    return {
+      ...m, savings: Number(savings),
+      transactions: await this.db.q('select id,type,amount,direction,reference,narration,created_at from transactions where member_id=$1 order by created_at desc limit 100', [id]),
+      loans: await this.db.q('select id,product_code,principal,tenor_months,status,created_at from loans where member_id=$1 order by created_at desc', [id]),
+      investments: await this.db.q('select x.amount,x.payout,x.created_at,s.title,s.status from investment_subscriptions x join investment_schemes s on s.id=x.scheme_id where x.member_id=$1 order by x.created_at desc', [id]),
+      audit: await this.db.q(`select a.id,a.action,a.created_at,u.email actor from audit_logs a left join users u on u.id=a.actor_id where a.entity=$1 order by a.id desc limit 50`, [id]),
+      reviewer: m.reviewed_by ? (await this.db.one('select email from users where id=$1', [m.reviewed_by]))?.email : null,
+    };
+  }
+  async file(memberId: string, docId: string) {
+    const d = await this.db.one('select filename,storage_key from kyc_documents where id=$1 and member_id=$2', [docId, memberId]);
+    if (!d || !existsSync(d.storage_key)) throw new NotFoundException();
+    const types: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.pdf': 'application/pdf' };
+    return { stream: createReadStream(d.storage_key), type: types[extname(d.filename).toLowerCase()] ?? 'application/octet-stream', name: d.filename };
   }
   async detail(id: string) {
-    const m = await this.db.one(`select m.*, u.email, u.phone from members m join users u on u.id=m.user_id where m.id=$1`, [id]);
+    const m = await this.db.one(`select m.*, u.email, u.phone, u.is_active from members m join users u on u.id=m.user_id where m.id=$1`, [id]);
     if (!m) throw new NotFoundException();
     m.bvn = m.bvn && `*******${m.bvn.slice(-4)}`; m.nin = m.nin && `*******${m.nin.slice(-4)}`; // mask PII in API output
     m.documents = await this.db.q('select id,kind,filename,created_at from kyc_documents where member_id=$1', [id]);
@@ -75,8 +109,16 @@ export class MembersController {
   @Put('me/kyc') save(@CurrentUser() u: AuthUser, @Body() d: KycDto) { return this.s.saveKyc(u, d); }
   @Post('me/kyc/documents') up(@CurrentUser() u: AuthUser, @Body() d: KycDocDto) { return this.s.upload(u, d); }
   @Post('me/kyc/submit') sub(@CurrentUser() u: AuthUser) { return this.s.submit(u); }
-  @Roles(...STAFF) @Get() list(@Query('status') s?: string) { return this.s.list(s); }
+  @Get('lookup/:mid') lookup(@CurrentUser() u: AuthUser, @Param('mid') mid: string) { return this.s.lookup(u, mid); }
+  @Roles(...STAFF) @Get() list(@Query('status') s?: string, @Query('q') q?: string) { return this.s.list(s, q); }
   @Roles(...STAFF) @Get(':id') get(@Param('id', ParseUUIDPipe) id: string) { return this.s.detail(id); }
+  @Roles(...STAFF) @Get(':id/full') full(@Param('id', ParseUUIDPipe) id: string) { return this.s.full(id); }
+  @Roles(...STAFF) @Get(':id/documents/:docId/file')
+  async file(@Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string, @Res({ passthrough: true }) res: any) {
+    const f = await this.s.file(id, docId);
+    res.set({ 'Content-Type': f.type, 'Content-Disposition': `inline; filename="${encodeURIComponent(f.name)}"`, 'Cache-Control': 'private, no-store' });
+    return new StreamableFile(f.stream);
+  }
   @Roles('admin') @Post(':id/review') review(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: ReviewDto) { return this.s.review(u, id, d); }
 }
 @Module({ providers: [MembersService], controllers: [MembersController] }) export class MembersModule {}

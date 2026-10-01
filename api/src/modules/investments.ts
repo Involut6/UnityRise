@@ -16,7 +16,7 @@ export class InvestmentsService {
     if (!s) throw new NotFoundException();
     if (s.status !== 'draft') throw new BadRequestException('Scheme is not a draft');
     if (s.created_by === u.id && u.role !== 'super_admin') throw new ForbiddenException('A scheme must be approved by someone other than its creator');
-    return this.db.one("update investment_schemes set status='open',approved_by=$2 where id=$1 returning *", [id, u.id]);
+    return this.db.one("update investment_schemes set status='open',approved_by=$2,opened_at=now() where id=$1 returning *", [id, u.id]);
   }
   list(staff: boolean) {
     return this.db.q(`select s.*, coalesce(sum(x.amount),0) raised, count(x.id) subscribers from investment_schemes s
@@ -37,6 +37,15 @@ export class InvestmentsService {
       if (Number(raised) + d.amount >= Number(s.target_amount)) await q("update investment_schemes set status='closed' where id=$1", [id]);
       return sub;
     });
+  }
+  async detail(u: AuthUser, id: string) {
+    const s = await this.db.one(`select s.*, coalesce((select sum(amount) from investment_subscriptions where scheme_id=s.id),0) raised,
+      (select count(*) from investment_subscriptions where scheme_id=s.id) subscribers from investment_schemes s where s.id=$1`, [id]);
+    if (!s || (s.status === 'draft' && u.role === 'member')) throw new NotFoundException();
+    const mine = u.memberId ? await this.db.q('select id,amount,payout,created_at from investment_subscriptions where scheme_id=$1 and member_id=$2 order by created_at desc', [id, u.memberId]) : [];
+    const base = s.opened_at ?? s.created_at;
+    const maturity = new Date(base); maturity.setMonth(maturity.getMonth() + s.duration_months);
+    return { ...s, expectedMaturity: maturity.toISOString(), mine };
   }
   portfolio(u: AuthUser) {
     return this.db.q(`select x.*, s.title, s.category, s.status, s.projected_roi_pct, s.duration_months from investment_subscriptions x
@@ -65,6 +74,7 @@ export class InvestmentsController {
   constructor(private s: InvestmentsService) {}
   @Get() list(@CurrentUser() u: AuthUser) { return this.s.list(u.role !== 'member'); }
   @Get('portfolio') pf(@CurrentUser() u: AuthUser) { return this.s.portfolio(u); }
+  @Get(':id') one(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.detail(u, id); }
   @Roles('admin') @Post() create(@CurrentUser() u: AuthUser, @Body() d: SchemeDto) { return this.s.create(u, d); }
   @Roles('admin') @Post(':id/approve') approve(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.approve(u, id); }
   @Post(':id/subscribe') sub(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: AmountDto) { return this.s.subscribe(u, id, d); }
