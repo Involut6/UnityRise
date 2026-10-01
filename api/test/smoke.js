@@ -9,7 +9,7 @@ const ok=(n,c,x)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(x)
  // second staff approver
  const mk=async(n)=>{const r=await call('POST','/auth/register',null,{email:`${n}${run}@t.com`,phone:'080'+String(run).slice(-7)+'adbochi'.indexOf(n[0]),password:'password123',firstName:n,lastName:'Test'});return r.j.token};
  const kyc=async(t)=>{await call('PUT','/members/me/kyc',t,{dateOfBirth:'1990-01-01',bvn:'12345678901',nin:'12345678901',address:'1 Test Street, Lagos'});
-  for(const k of['photo','id_card','signature','proof_of_address'])await call('POST','/members/me/kyc/documents',t,{kind:k,filename:k+'.png',contentBase64:'aGVsbG8='});
+  for(const k of['photo','id_card','signature','proof_of_address'])await call('POST','/members/me/kyc/documents',t,{kind:k,filename:k+'.png',contentBase64:'iVBORw0KGgoAAAANSUhEUg=='});
   return (await call('POST','/members/me/kyc/submit',t)).j};
  const users=[];
  for(const n of['ada','bola','chi']){const t=await mk(n);ok(n+' kyc submit',(await kyc(t)).status==='submitted');users.push(t)}
@@ -56,5 +56,21 @@ const ok=(n,c,x)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(x)
  ok('double vote blocked',(await call('POST',`/polls/${poll.id}/vote`,ada,{optionIndex:1})).s===400);
  ok('audit log',(await call('GET','/admin/audit',adm)).j.length>10);
  ok('loan book csv',(await call('GET','/reports/loan-book?format=csv',adm)).s===200);
+ // --- hardening checks ---
+ const crypto=require('crypto');
+ const hook=async(prov,body,sig)=>{const raw=JSON.stringify(body);const h={'content-type':'application/json'};if(sig!==false)h[prov==='paystack'?'x-paystack-signature':'verif-hash']=prov==='paystack'?crypto.createHmac('sha512',process.env.PAYSTACK_WEBHOOK_SECRET).update(raw).digest('hex'):process.env.FLUTTERWAVE_WEBHOOK_SECRET;const r=await fetch(B+'/payments/webhook/'+prov,{method:'POST',headers:h,body:raw});return{s:r.status,j:await r.json()}};
+ const pay=async(t,a)=>(await call('POST','/payments/initiate',t,{provider:'paystack',purpose:'topup',amount:a})).j.reference;
+ const r1=await pay(ada,5000);
+ ok('webhook amount mismatch not credited',(await hook('paystack',{data:{reference:r1,status:'success',amount:100}})).j.reason==='amount_mismatch');
+ const r2=await pay(ada,5000);
+ ok('webhook success requires amount',(await hook('paystack',{data:{reference:r2,status:'success'}})).s===400);
+ ok('webhook valid credits',(await hook('paystack',{data:{reference:r2,status:'success',amount:500000}})).j.status==='success');
+ ok('webhook replay idempotent',(await hook('paystack',{data:{reference:r2,status:'success',amount:500000}})).j.duplicate===true);
+ const r3=await pay(ada,5000);
+ ok('member cannot simulate another member payment',(await call('POST',`/payments/${r3}/simulate`,bola)).s===400);
+ const lk=`lock${run}@t.com`; await call('POST','/auth/register',null,{email:lk,phone:'081'+String(run).slice(-8),password:'password123',firstName:'L',lastName:'K'});
+ for(let i=0;i<5;i++)await call('POST','/auth/login',null,{email:lk,password:'wrong-password'});
+ ok('account locked after repeated failures',(await call('POST','/auth/login',null,{email:lk,password:'password123'})).s===401);
+ ok('error responses hide internals',(await call('GET','/members/not-a-uuid',adm)).j.statusCode===400);
  ok('unauth rejected',(await call('GET','/savings')).s===401);
 })();
