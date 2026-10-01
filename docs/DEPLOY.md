@@ -48,3 +48,4 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | Browser: CORS error | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
 | Browser calls `/api/...` on the web domain | `VITE_API_URL` not set at **build** time; set it and redeploy |
 | 413 on upload | File over 3MB (or a very large PDF) |
+| Build fails with `tsc: command not found` | `NODE_ENV=production` makes npm skip dev dependencies at install time. `api/vercel.json` uses `npm install --include=dev` to avoid this; make sure that file is deployed |
