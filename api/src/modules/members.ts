@@ -2,6 +2,8 @@ import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoun
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { config } from '../common/config';
+import { sniffFile } from '../common/files';
 import { Db } from '../common/db';
 import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
 import { KycDocDto, KycDto, ReviewDto } from '../common/dto';
@@ -22,8 +24,10 @@ export class MembersService {
   async upload(u: AuthUser, d: KycDocDto) {
     const buf = Buffer.from(d.contentBase64, 'base64');
     if (!buf.length || buf.length > 5 * 1024 * 1024) throw new BadRequestException('File must be 1B–5MB');
-    const dir = join(process.env.UPLOAD_DIR ?? 'uploads', this.mid(u)); mkdirSync(dir, { recursive: true });
-    const key = join(dir, `${randomUUID()}.bin`); writeFileSync(key, buf); // swap for S3 in production
+    const type = sniffFile(buf);
+    if (!type) throw new BadRequestException('Only JPEG, PNG or PDF files are accepted');
+    const dir = join(config().uploadDir, this.mid(u)); mkdirSync(dir, { recursive: true });
+    const key = join(dir, `${randomUUID()}.${type.ext}`); writeFileSync(key, buf); // swap for private object storage in production
     await this.db.q('delete from kyc_documents where member_id=$1 and kind=$2', [u.memberId, d.kind]);
     await this.db.q('insert into kyc_documents(member_id,kind,filename,storage_key) values($1,$2,$3,$4)', [u.memberId, d.kind, d.filename.slice(0, 200), key]);
     return { uploaded: d.kind };

@@ -7,17 +7,21 @@ import { money, notify, postTxn, savingsBalance } from '../common/ledger';
 const REQUIRED_APPROVALS = 2;       // multi-level authorisation: two distinct staff approvals
 const PENALTY_RATE = 0.05;          // 5% of the overdue instalment, applied once
 
-/** Reducing-balance equal-instalment (annuity) schedule. */
+/**
+ * Reducing-balance equal-instalment (annuity) schedule. Computed in integer kobo so no float error accumulates;
+ * interest is rounded half-up per period and the final instalment absorbs any remainder, so principals sum exactly.
+ */
 export function buildSchedule(principal: number, annualPct: number, months: number, start = new Date()) {
+  const total = Math.round(principal * 100);
   const r = annualPct / 100 / 12;
-  const pmt = r === 0 ? principal / months : (principal * r) / (1 - Math.pow(1 + r, -months));
-  let bal = principal; const rows = [];
+  const pmt = r === 0 ? total / months : (total * r) / (1 - Math.pow(1 + r, -months));
+  let bal = total; const rows = [];
   for (let i = 1; i <= months; i++) {
-    const interest = money(bal * r);
-    const prin = i === months ? money(bal) : money(pmt - interest);
-    bal = money(bal - prin);
+    const interest = Math.round(bal * r);
+    const prin = i === months ? bal : Math.min(bal, Math.round(pmt) - interest);
+    bal -= prin;
     const due = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, Math.min(start.getUTCDate(), 28)));
-    rows.push({ no: i, due: due.toISOString().slice(0, 10), principal: prin, interest: interest });
+    rows.push({ no: i, due: due.toISOString().slice(0, 10), principal: prin / 100, interest: interest / 100 });
   }
   return rows;
 }
