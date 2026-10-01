@@ -30,3 +30,15 @@ export function downloadText(name: string, text: string, type = 'text/csv') {
   const url = URL.createObjectURL(new Blob(['﻿' + text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 export const fileToBase64 = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] ?? ''); r.onerror = () => rej(new Error('Could not read file')); r.readAsDataURL(f); });
+
+/** Downscale large photos in the browser so uploads stay small (phone photos are often 3-8MB). PDFs/small images pass through. */
+export async function shrinkImage(file: File, maxDim = 1600, quality = 0.85): Promise<File> {
+  if (!file.type.startsWith('image/') || file.size < 500 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file); const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>(r => c.toBlob(r, 'image/jpeg', quality));
+    return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; }
+}

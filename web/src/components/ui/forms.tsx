@@ -1,6 +1,7 @@
 import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, useEffect, useId, useRef, useState } from 'react';
 import { CheckCircle2, FileUp, Search, Upload, X } from 'lucide-react';
 import { cn } from './primitives';
+import { shrinkImage } from '../../lib/format';
 import { FieldCtx, useField } from './field';
 export { Select, DatePicker, DateTimePicker } from './pickers';
 
@@ -37,14 +38,14 @@ export function OptionCard({ selected, onSelect, title, description, right, name
     <span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span>{description && <span className="block text-sm text-muted">{description}</span>}</span>{right}</label>;
 }
 
-export function FileUpload({ label, file, onChange, accept = 'image/*,.pdf', maxMb = 5, hint }: { label: string; file: File | null; onChange: (f: File | null) => void; accept?: string; maxMb?: number; hint?: string }) {
+export function FileUpload({ label, file, onChange, accept = 'image/*,.pdf', maxMb = 3, hint }: { label: string; file: File | null; onChange: (f: File | null) => void; accept?: string; maxMb?: number; hint?: string }) {
   const id = useId(); const [err, setErr] = useState('');
-  const pick = (f?: File) => { if (!f) return; if (f.size > maxMb * 1024 * 1024) { setErr(`File is larger than ${maxMb}MB`); return; } setErr(''); onChange(f); };
+  const pick = async (raw?: File) => { if (!raw) return; const f = await shrinkImage(raw); if (f.size > maxMb * 1024 * 1024) { setErr(`File is larger than ${maxMb}MB. Try a smaller photo or a lower-resolution PDF.`); return; } setErr(''); onChange(f); };
   return <div className="mb-3">
     <div className={cn('flex items-center gap-3 rounded-xl border-2 border-dashed p-3 transition', file ? 'border-success/60 bg-success-soft' : 'border-line-strong bg-surface2 hover:border-brand')}
       onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); pick(e.dataTransfer.files[0]); }}>
       <div className={cn('grid size-10 shrink-0 place-items-center rounded-lg', file ? 'text-success' : 'bg-surface text-muted')}>{file ? <CheckCircle2 size={22} /> : <FileUp size={20} />}</div>
-      <div className="min-w-0 flex-1"><p className="text-sm font-medium">{label}</p><p className="truncate text-xs text-muted">{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : hint ?? `PNG, JPG or PDF up to ${maxMb}MB`}</p></div>
+      <div className="min-w-0 flex-1"><p className="text-sm font-medium">{label}</p><p className="truncate text-xs text-muted">{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : hint ?? `PNG, JPG or PDF up to ${maxMb}MB (photos are shrunk automatically)`}</p></div>
       {file ? <button type="button" onClick={() => onChange(null)} className="rounded-md p-2 text-muted hover:bg-surface" aria-label={`Remove ${label}`}><X size={16} /></button>
         : <label htmlFor={id} className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-sm font-semibold hover:bg-surface2"><Upload size={15} />Choose</label>}
       <input id={id} type="file" accept={accept} className="sr-only" onChange={e => { pick(e.target.files?.[0]); e.target.value = ''; }} />

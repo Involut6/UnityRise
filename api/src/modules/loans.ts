@@ -1,7 +1,5 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Query, StreamableFile, Res } from '@nestjs/common';
-import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
+import { MAX_FILE, sniffFile } from '../common/files';
 import { Db, Q } from '../common/db';
 import { AuthUser, CurrentUser, Roles, STAFF } from '../common/auth';
 import { ConsentDto, KycDocDto, LoanApplyDto, ReviewDto } from '../common/dto';
@@ -66,10 +64,10 @@ export class LoansService {
     const l = await this.db.one('select id from loans where id=$1 and member_id=$2', [id, u.memberId]);
     if (!l) throw new NotFoundException();
     const buf = Buffer.from(d.contentBase64, 'base64');
-    if (!buf.length || buf.length > 5 * 1024 * 1024) throw new BadRequestException('File must be 1B–5MB');
-    const dir = join(process.env.UPLOAD_DIR ?? 'uploads', 'loans', id); mkdirSync(dir, { recursive: true });
-    const key = join(dir, `${randomUUID()}.bin`); writeFileSync(key, buf);
-    await this.db.q('insert into loan_documents(loan_id,filename,storage_key) values($1,$2,$3)', [id, d.filename.slice(0, 200), key]);
+    if (!buf.length || buf.length > MAX_FILE) throw new BadRequestException(`File must be 1B–${MAX_FILE / 1024 / 1024}MB`);
+    const type = sniffFile(buf);
+    if (!type) throw new BadRequestException('Only JPEG, PNG or PDF files are accepted');
+    await this.db.q('insert into loan_documents(loan_id,filename,content,mime) values($1,$2,$3,$4)', [id, d.filename.slice(0, 200), buf, type.mime]);
     return { uploaded: d.filename };
   }
   async detail(id: string) {
@@ -86,10 +84,9 @@ export class LoansService {
     };
   }
   async file(id: string, docId: string) {
-    const d = await this.db.one('select filename,storage_key from loan_documents where id=$1 and loan_id=$2', [docId, id]);
-    if (!d || !existsSync(d.storage_key)) throw new NotFoundException();
-    const types: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.pdf': 'application/pdf' };
-    return { stream: createReadStream(d.storage_key), type: types[extname(d.filename).toLowerCase()] ?? 'application/octet-stream', name: d.filename };
+    const d = await this.db.one('select filename,content,mime from loan_documents where id=$1 and loan_id=$2', [docId, id]);
+    if (!d?.content) throw new NotFoundException();
+    return { buffer: d.content as Buffer, type: d.mime ?? 'application/octet-stream', name: d.filename };
   }
   mine(u: AuthUser) { return this.db.q('select * from loans where member_id=$1 order by created_at desc', [u.memberId]); }
   guaranteeRequests(u: AuthUser) {
@@ -183,7 +180,7 @@ export class LoansController {
   async lfile(@Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string, @Res({ passthrough: true }) res: any) {
     const f = await this.s.file(id, docId);
     res.set({ 'Content-Type': f.type, 'Content-Disposition': `inline; filename="${encodeURIComponent(f.name)}"`, 'Cache-Control': 'private, no-store' });
-    return new StreamableFile(f.stream);
+    return new StreamableFile(f.buffer);
   }
   @Get('mine') mine(@CurrentUser() u: AuthUser) { return this.s.mine(u); }
   @Get('guarantee-requests') gr(@CurrentUser() u: AuthUser) { return this.s.guaranteeRequests(u); }
@@ -196,4 +193,4 @@ export class LoansController {
   @Roles('admin') @Post('jobs/penalties') pen() { return this.s.runPenalties(); }
   @Roles('admin') @Post('jobs/reminders') rem() { return this.s.runReminders(); }
 }
-@Module({ providers: [LoansService], controllers: [LoansController] }) export class LoansModule {}
+@Module({ providers: [LoansService], controllers: [LoansController], exports: [LoansService] }) export class LoansModule {}

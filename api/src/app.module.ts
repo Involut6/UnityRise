@@ -13,12 +13,13 @@ import { InvestmentsModule } from './modules/investments';
 import { CommunityModule } from './modules/community';
 import { ReportsModule } from './modules/reports';
 import { AdminModule } from './modules/admin';
+import { OpsModule } from './modules/ops';
 
 @Module({
   imports: [
     DbModule,
     JwtModule.register({ global: true, secret: config().jwtSecret, signOptions: { expiresIn: '30m' } }),
-    AuthModule, MembersModule, SavingsModule, LoansModule, InvestmentsModule, CommunityModule, ReportsModule, AdminModule,
+    AuthModule, MembersModule, SavingsModule, LoansModule, InvestmentsModule, CommunityModule, ReportsModule, AdminModule, OpsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
 })

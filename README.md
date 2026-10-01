@@ -34,6 +34,7 @@ investment schemes (maker-checker approval, subscriptions, maturity payout), ann
 
 See `docs/BACKEND_AUDIT.md` for the security/architecture audit, what was hardened, and the remaining gaps.
 Environment variables are documented in `api/.env.example`; the API refuses to start if required config is invalid.
+Deploying on Vercel: see `docs/DEPLOY.md`.
 
 ## Frontend notes
 - Routes: member portal at `/`, admin at `/admin` (staff who are also members switch via the top bar). Every page is lazy-loaded; charts load on demand.

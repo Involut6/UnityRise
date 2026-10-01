@@ -7,3 +7,6 @@ export function sniffFile(b: Buffer): FileKind | undefined {
   if (b.length >= 5 && b.subarray(0, 5).toString('latin1') === '%PDF-') return { ext: 'pdf', mime: 'application/pdf' };
   return undefined;
 }
+
+/** Max upload size. Base64 inflates by 4/3 and Vercel rejects request bodies over 4.5MB, so 3MB keeps every host working. */
+export const MAX_FILE = 3 * 1024 * 1024;
