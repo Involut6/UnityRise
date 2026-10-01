@@ -15,7 +15,7 @@ cd api && cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, ADMIN_*
 npm i && npm run migrate && npm run seed && npm run build
 npm start                                  # API on :3000 (loads .env)
 cd ../web && npm i && npm run build      # API serves web/dist; or `npm run dev` for :5173
-node api/test/smoke.js                   # end-to-end test against a running API (export the .env vars first)
+node api/test/smoke.cjs                   # end-to-end test against a running API (export the .env vars first)
 (cd api && npm test)                     # unit tests (vitest)
 ```
 
@@ -41,7 +41,7 @@ Deploying on Vercel: see `docs/DEPLOY.md`.
 - Design tokens live in `web/src/index.css` (semantic colours switch automatically for dark mode). Reusable pieces: `Button, Card, StatusBadge, Alert, DataTable, Tabs, Modal, Drawer, useConfirm, useToast, FormField, FileUpload, StatCard, FinancialCard, ChartCard, TransactionTable`.
 - Session timeout: 15 minutes idle → 60 s warning → sign out. "Stay signed in" refreshes the token (`POST /api/auth/refresh`).
 - "Export Excel" downloads CSV (opens in Excel). "Export PDF" uses the browser print dialog → Save as PDF.
-- Test flows: `node api/test/smoke.js` (API) and the Playwright script described in the PR/commit for UI.
+- Test flows: `node api/test/smoke.cjs` (API) and the Playwright script described in the PR/commit for UI.
 
 ## Loan rules
 - Loans carry **no interest**. Members repay the amount borrowed in equal monthly instalments; a late instalment gets a one-time 5% late-payment penalty.

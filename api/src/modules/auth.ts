@@ -2,10 +2,10 @@ import { BadRequestException, Body, Controller, Get, Injectable, Module, Post, R
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { authenticator } from 'otplib';
-import { config } from '../common/config';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Public } from '../common/auth';
-import { ChangePasswordDto, LoginDto, RegisterDto } from '../common/dto';
+import { config } from '../common/config.js';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Public } from '../common/auth.js';
+import { ChangePasswordDto, LoginDto, RegisterDto } from '../common/dto.js';
 
 // Valid bcrypt hash of a random string; compared against when the user is unknown so response time doesn't reveal account existence.
 const DUMMY_HASH = bcrypt.hashSync(Math.random().toString(36), 12);

@@ -1,7 +1,7 @@
 import { CanActivate, createParamDecorator, ExecutionContext, ForbiddenException, Injectable, SetMetadata, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { Db } from './db';
+import { Db } from './db.js';
 
 export type Role = 'member' | 'loan_manager' | 'accountant' | 'admin' | 'super_admin';
 export interface AuthUser { id: string; role: Role; memberId: string | null }

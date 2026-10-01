@@ -1,8 +1,8 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Roles } from '../common/auth';
-import { AmountDto, MatureDto, SchemeDto } from '../common/dto';
-import { money, notify, postTxn, savingsBalance } from '../common/ledger';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Roles } from '../common/auth.js';
+import { AmountDto, MatureDto, SchemeDto } from '../common/dto.js';
+import { money, notify, postTxn, savingsBalance } from '../common/ledger.js';
 
 @Injectable()
 export class InvestmentsService {

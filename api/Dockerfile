@@ -15,5 +15,5 @@ COPY package.json ./
 COPY db ./db
 USER node
 EXPOSE 3000
-# Run `node db/migrate.js` as a release step before starting new instances.
+# Run `node db/migrate.cjs` as a release step before starting new instances.
 CMD ["node", "dist/main.js"]

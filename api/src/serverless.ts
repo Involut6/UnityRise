@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { createApp } from './app.factory';
+import { createApp } from './app.factory.js';
 
 /**
  * Vercel (serverless) entry. The Nest app is created once per warm instance and reused.

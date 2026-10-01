@@ -1,8 +1,8 @@
 import { Controller, Get, Headers, Module, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
-import { Db } from '../common/db';
-import { Public } from '../common/auth';
-import { LoansModule, LoansService } from './loans';
+import { Db } from '../common/db.js';
+import { Public } from '../common/auth.js';
+import { LoansModule, LoansService } from './loans.js';
 
 const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 

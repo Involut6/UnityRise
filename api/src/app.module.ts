@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
-import { config } from './common/config';
-import { DbModule } from './common/db';
-import { AuthGuard } from './common/auth';
-import { AuditInterceptor } from './common/audit';
-import { AuthModule } from './modules/auth';
-import { MembersModule } from './modules/members';
-import { SavingsModule } from './modules/savings';
-import { LoansModule } from './modules/loans';
-import { InvestmentsModule } from './modules/investments';
-import { CommunityModule } from './modules/community';
-import { ReportsModule } from './modules/reports';
-import { AdminModule } from './modules/admin';
-import { OpsModule } from './modules/ops';
+import { config } from './common/config.js';
+import { DbModule } from './common/db.js';
+import { AuthGuard } from './common/auth.js';
+import { AuditInterceptor } from './common/audit.js';
+import { AuthModule } from './modules/auth.js';
+import { MembersModule } from './modules/members.js';
+import { SavingsModule } from './modules/savings.js';
+import { LoansModule } from './modules/loans.js';
+import { InvestmentsModule } from './modules/investments.js';
+import { CommunityModule } from './modules/community.js';
+import { ReportsModule } from './modules/reports.js';
+import { AdminModule } from './modules/admin.js';
+import { OpsModule } from './modules/ops.js';
 
 @Module({
   imports: [

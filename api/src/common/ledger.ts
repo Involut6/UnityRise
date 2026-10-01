@@ -1,4 +1,4 @@
-import { Q } from './db';
+import { Q } from './db.js';
 
 export const money = (n: any) => Math.round(Number(n) * 100) / 100;
 

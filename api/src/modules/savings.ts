@@ -1,11 +1,11 @@
 import { Logger, BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, Post, Put, Query, Headers, RawBodyRequest, Req, UnauthorizedException, Param } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { config } from '../common/config';
-import { PROVIDERS, Provider, signatureValid, toKobo } from '../common/payment-utils';
-import { Db } from '../common/db';
-import { AuthUser, CurrentUser, Public, Roles } from '../common/auth';
-import { AmountDto, PayInitDto, TargetDto } from '../common/dto';
-import { applyRepayment, money, notify, postTxn, savingsBalance } from '../common/ledger';
+import { config } from '../common/config.js';
+import { PROVIDERS, Provider, signatureValid, toKobo } from '../common/payment-utils.js';
+import { Db } from '../common/db.js';
+import { AuthUser, CurrentUser, Public, Roles } from '../common/auth.js';
+import { AmountDto, PayInitDto, TargetDto } from '../common/dto.js';
+import { applyRepayment, money, notify, postTxn, savingsBalance } from '../common/ledger.js';
 
 @Injectable()
 export class SavingsService {
