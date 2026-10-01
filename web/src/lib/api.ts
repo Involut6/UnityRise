@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** API origin. Empty = same origin (dev proxy / API serving the app). Set VITE_API_URL when the API is hosted elsewhere, e.g. https://unityrise-api.vercel.app */
+const API = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/+$/, '') + '/api';
+
 let token = '';
 try { token = sessionStorage.getItem('t') ?? ''; } catch { /* storage unavailable */ }
 export const setToken = (t: string) => { token = t; try { t ? sessionStorage.setItem('t', t) : sessionStorage.removeItem('t'); } catch { /* ignore */ } };
@@ -13,7 +16,7 @@ export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn;
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
   let r: Response;
   try {
-    r = await fetch('/api' + path, { method, headers: { 'content-type': 'application/json', ...(token && authHeader()) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    r = await fetch(API + path, { method, headers: { 'content-type': 'application/json', ...(token && authHeader()) }, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch { throw new ApiError('Cannot reach the server. Check your connection and try again.', 0); }
   const text = await r.text(); let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
@@ -27,7 +30,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
 
 /** Authenticated file/blob fetch (used for documents and exports). */
 export async function fetchBlob(path: string): Promise<Blob> {
-  const r = await fetch('/api' + path, { headers: authHeader() });
+  const r = await fetch(API + path, { headers: authHeader() });
   if (!r.ok) throw new ApiError('Could not load the file', r.status);
   return r.blob();
 }

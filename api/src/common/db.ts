@@ -6,7 +6,8 @@ export type Q = <T = any>(sql: string, params?: any[]) => Promise<T[]>;
 
 @Injectable()
 export class Db implements OnModuleDestroy {
-  pool = new Pool({ connectionString: config().databaseUrl, max: 10 });
+  // Serverless: many short-lived instances, so keep each pool tiny (use Neon's pooled connection string).
+  pool = new Pool({ connectionString: config().databaseUrl, max: process.env.VERCEL ? 2 : 10, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 10_000 });
   q: Q = async (sql, params) => (await this.pool.query(sql, params)).rows;
   one = async <T = any>(sql: string, params?: any[]) => (await this.q<T>(sql, params))[0];
   /** Run fn in a transaction; fn receives a query function bound to the tx connection. */
