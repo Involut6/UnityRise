@@ -7,17 +7,22 @@ import { Textarea, FormField } from './forms';
 /** Shared behaviour: Esc to close, focus moves in, focus returns on close, background scroll locked. */
 function useOverlay(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose in a ref: callers pass inline functions, and re-running the effect on every render
+  // would yank focus back to the first field (and restore it to the trigger) on each keystroke.
+  const closeRef = useRef(onClose); closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null; const el = ref.current;
-    el?.querySelector<HTMLElement>('[data-autofocus],input,select,textarea,button:not([data-close])')?.focus({ preventScroll: true }) ?? el?.focus();
+    // focus() returns undefined, so it must not be chained with `??` (that always ran the fallback and stole focus back).
+    const first = el?.querySelector<HTMLElement>('[data-autofocus],input,select,textarea,button:not([data-close])');
+    (first ?? el)?.focus({ preventScroll: true });
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); }
       if (e.key === 'Tab' && el) { const f = [...el.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x => x.offsetParent !== null);
         if (!f.length) return; const first = f[0]!, last = f[f.length - 1]!; if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
     };
     document.addEventListener('keydown', key); const o = document.body.style.overflow; document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', key); document.body.style.overflow = o; prev?.focus?.(); };
-  }, [onClose]);
+  }, []);
   return ref;
 }
 
