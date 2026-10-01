@@ -6,10 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "node dist/main.js",
-    "dev": "ts-node src/main.ts",
-    "migrate": "node db/migrate.js",
-    "seed": "node db/seed.js"
+    "start": "node --env-file=.env dist/main.js",
+    "dev": "tsc && node --env-file=.env dist/main.js",
+    "migrate": "node --env-file=.env db/migrate.js",
+    "seed": "node --env-file=.env db/seed.js"
   },
   "keywords": [],
   "author": "",
@@ -35,7 +35,6 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.3",
     "@types/pg": "^8.23.1",
-    "ts-node": "^10.9.2",
     "typescript": "^7.0.2"
   }
 }

@@ -12,7 +12,7 @@ web/   React 18 + Vite + TypeScript – member portal and staff/admin dashboard
 ```bash
 cd api && cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, ADMIN_*
 npm i && npm run migrate && npm run seed && npm run build
-set -a; . ./.env; set +a; npm start      # API on :3000
+npm start                                  # API on :3000 (loads .env)
 cd ../web && npm i && npm run build      # API serves web/dist; or `npm run dev` for :5173
 node api/test/smoke.js                   # end-to-end test against a running API
 ```
