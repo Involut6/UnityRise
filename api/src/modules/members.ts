@@ -73,7 +73,7 @@ export class MembersService {
     return { stream: createReadStream(d.storage_key), type: types[extname(d.filename).toLowerCase()] ?? 'application/octet-stream', name: d.filename };
   }
   async detail(id: string) {
-    const m = await this.db.one(`select m.*, u.email, u.phone from members m join users u on u.id=m.user_id where m.id=$1`, [id]);
+    const m = await this.db.one(`select m.*, u.email, u.phone, u.is_active from members m join users u on u.id=m.user_id where m.id=$1`, [id]);
     if (!m) throw new NotFoundException();
     m.bvn = m.bvn && `*******${m.bvn.slice(-4)}`; m.nin = m.nin && `*******${m.nin.slice(-4)}`; // mask PII in API output
     m.documents = await this.db.q('select id,kind,filename,created_at from kyc_documents where member_id=$1', [id]);

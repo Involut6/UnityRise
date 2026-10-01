@@ -79,7 +79,7 @@ export class ReportsService {
         from members m left join transactions t on t.member_id=m.id where m.kyc_status='approved' group by m.id order by m.membership_id`);
       case 'investments': return this.db.q(`select s.title,s.category,s.status,s.target_amount,s.projected_roi_pct,coalesce(sum(x.amount),0) raised,coalesce(sum(x.payout),0) paid_out
         from investment_schemes s left join investment_subscriptions x on x.scheme_id=s.id group by s.id order by s.created_at`);
-      case 'cash-flow': return this.db.q(`select to_char(date_trunc('month',created_at),'YYYY-MM') month,
+      case 'cash-flow': return this.db.q(`select to_char(date_trunc('month',created_at),'YYYY-MM') as month,
         sum(amount) filter (where type in ('contribution','topup','loan_repayment')) inflow,
         sum(amount) filter (where type in ('withdrawal','loan_disbursement','investment_return')) outflow from transactions group by 1 order by 1`);
       case 'my-statement': return this.db.q('select created_at,type,narration,case when direction=1 then amount end credit,case when direction=-1 then amount end debit from transactions where member_id=$1 and affects_savings and created_at::date between $2 and $3 order by created_at', [memberId, f, t]);
