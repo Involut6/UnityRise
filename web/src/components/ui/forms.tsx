@@ -14,7 +14,7 @@ export const Textarea = ({ invalid: _i, className, ...p }: TextareaHTMLAttribute
 /** Label + control + hint/error wired together for screen readers. */
 export function FormField({ label, hint, error, required, children, className }: { label: string; hint?: string; error?: string; required?: boolean; children: ReactNode; className?: string }) {
   const id = useId(); const describedBy = error ? `${id}-e` : hint ? `${id}-h` : undefined;
-  return <FieldCtx.Provider value={{ id, describedBy, invalid: !!error }}><div className={cn('mb-4 grid gap-1.5', className)}>
+  return <FieldCtx.Provider value={{ id, describedBy, invalid: !!error }}><div className={cn('mb-4 grid content-start gap-1.5', className)}>
     <label htmlFor={id} className="text-sm font-medium">{label}{required && <span className="text-danger" aria-hidden> *</span>}</label>{children}
     {error ? <p id={`${id}-e`} role="alert" className="text-xs text-danger">{error}</p> : hint ? <p id={`${id}-h`} className="text-xs text-muted">{hint}</p> : null}</div></FieldCtx.Provider>;
 }

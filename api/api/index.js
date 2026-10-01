@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   // CORS headers on the failure response so the browser shows this message instead of an opaque "CORS error".
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-headers', 'content-type, authorization');
-  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
   res.statusCode = 500; res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify({ statusCode: 500, message: startupError }));
