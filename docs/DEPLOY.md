@@ -33,6 +33,7 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 `VITE_API_URL = https://<your-api>.vercel.app` (no trailing slash), then redeploy. Put the web URL into the API's `CORS_ORIGIN`.
 
 ## Things to know
+- **Node version:** the API needs Node 22.12 or newer. `api/package.json` pins `22.x`; confirm Project Settings → Node.js Version is 22.x or 24.x.
 - **Uploads** (KYC and loan documents) are stored in Postgres. Vercel rejects request bodies over 4.5MB, so files are limited to **3MB**; the web app shrinks photos automatically. PDFs over 3MB are refused.
 - **Payments:** the dev-only "simulate" endpoint is disabled in production. Until live Paystack/Flutterwave integration is added, deposits stay *pending*. For a demo only, set `NODE_ENV=development` on a non-production project to enable the simulator. Never do that with real money.
 - **Cold starts:** the first request after idle can take 1–3 s.
@@ -45,9 +46,11 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | 404 on every URL | Root Directory is not `api`, or `vercel.json` was not picked up |
 | `No entrypoint found which imports nestjs` | Vercel auto-detected NestJS. `api/vercel.json` sets `"framework": null` to prevent it; also set Settings → Build & Development → Framework Preset to **Other** |
 | `No Output Directory named "public" found` | The API is functions-only, but Vercel still wants a static folder. `api/vercel.json` sets `outputDirectory: "public"` and `api/public/index.html` exists; make sure both are deployed |
+| `require() of ES Module … not supported` / `Node vXX is too old` | The API needs **Node 22.12+** (Nest 12 is an ES module). `api/package.json` pins `engines.node` to `22.x`; also set Project Settings → Build & Development → **Node.js Version** to 22.x (or 24.x) and redeploy |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
 | `relation "…" does not exist` | Migrations not applied to this database |
-| Browser: CORS error | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
+| Browser: CORS error + **500** on the `OPTIONS` (preflight) request | The API failed to start because of a bad environment variable (for example `CORS_ORIGIN=*`, a `JWT_SECRET` under 32 characters, or a missing `DATABASE_URL`). Open `/api/health` to read the message. Never use `*` for `CORS_ORIGIN` |
+| Browser: CORS error (preflight is 204 or 200) | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
 | Browser calls `/api/...` on the web domain | `VITE_API_URL` not set at **build** time; set it and redeploy |
 | 413 on upload | File over 3MB (or a very large PDF) |
 | Build fails with `tsc: command not found` | `NODE_ENV=production` makes npm skip dev dependencies at install time. `api/vercel.json` uses `npm install --include=dev` to avoid this; make sure that file is deployed |
