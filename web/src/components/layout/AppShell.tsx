@@ -1,11 +1,12 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronsLeft, ChevronsRight, LogOut, Menu, Repeat, ShieldCheck, UserRound, Users as UsersIcon, Timer } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, Repeat, ShieldCheck, UserRound, Users as UsersIcon, Timer } from 'lucide-react';
 import { ADMIN_NAV, MEMBER_NAV, type NavGroup, type NavItem } from './nav';
 import { Avatar, Badge, Button, PageSkeleton, Tooltip, cn } from '../ui/primitives';
 import { Drawer, Modal } from '../ui/overlay';
 import { useAuth } from '../../lib/auth';
 import { useApi } from '../../lib/api';
+import { ThemeToggle } from '../../lib/theme';
 import { date, titleCase } from '../../lib/format';
 
 const Logo = ({ small }: { small?: boolean }) => <Link to="/" className="flex items-center gap-2.5 font-bold" aria-label="UnityRise home">
@@ -25,6 +26,9 @@ function Sidebar({ groups, collapsed, onToggle, badges, mode }: { groups: NavGro
   return <aside className={cn('no-print fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-surface transition-[width] duration-200 md:flex', collapsed ? 'w-[72px]' : 'w-64')} aria-label="Primary">
     <div className={cn('flex h-16 items-center border-b border-line', collapsed ? 'justify-center' : 'justify-between px-5')}><Logo small={collapsed} />
       {!collapsed && mode === 'admin' && <Badge tone="brand">Admin</Badge>}</div>
+    <button onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      className="absolute -right-3 top-[52px] z-40 grid size-6 place-items-center rounded-full border border-line-strong bg-surface text-muted shadow-card transition hover:bg-brand hover:text-on-brand">
+      {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}</button>
     <nav className="scroll-thin flex-1 overflow-y-auto px-3 py-4">{groups.map(g => <div key={g.title} className="mb-5">
       {!collapsed ? <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wider text-muted">{g.title}</p> : <div className="mx-3 mb-2 border-t border-line first:hidden" />}
       <ul className="grid gap-0.5">{g.items.map(i => <li key={i.to}><NavLink to={i.to} end={i.end} aria-label={collapsed ? i.label : undefined}
@@ -37,8 +41,7 @@ function Sidebar({ groups, collapsed, onToggle, badges, mode }: { groups: NavGro
       <div className={cn('flex items-center gap-3 rounded-xl p-2', collapsed && 'justify-center')}><Avatar name={me?.first_name ? `${me.first_name} ${me.last_name}` : me?.email ?? '?'} />
         {!collapsed && <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{me?.first_name ? `${me.first_name} ${me.last_name}` : me?.email}</p><p className="truncate text-xs text-muted">{me?.membership_id ?? titleCase(me?.role ?? '')}</p></div>}
         {!collapsed && <button onClick={signOut} className="grid size-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-ink" aria-label="Sign out"><LogOut size={18} /></button>}</div>
-      <button onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg text-sm text-muted hover:bg-surface2">
-        {collapsed ? <ChevronsRight size={18} /> : <><ChevronsLeft size={18} />Collapse</>}</button></div></aside>;
+</div></aside>;
 }
 
 function MobileNav({ groups, badges }: { groups: NavGroup[]; badges: Record<string, number> }) {
@@ -81,13 +84,13 @@ function UserMenu() {
       <button role="menuitem" onClick={signOut} className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-danger hover:bg-danger-soft"><LogOut size={17} />Sign out</button></div>}</div>;
 }
 
-function Topbar({ mode, unread, collapsed, onToggle }: { mode: 'member' | 'admin'; unread: number; collapsed: boolean; onToggle: () => void }) {
+function Topbar({ mode, unread }: { mode: 'member' | 'admin'; unread: number }) {
   const { me, isStaff } = useAuth(); const [panel, setPanel] = useState(false); const nav = useNavigate();
   const canSwitch = isStaff && !!me?.member_id;
   return <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur md:px-8">
-    <button onClick={onToggle} className="hidden size-10 place-items-center rounded-lg text-muted hover:bg-surface2 md:grid lg:hidden" aria-label="Toggle sidebar">{collapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}</button>
     <div className="md:hidden"><Logo /></div><div className="flex-1" />
     {canSwitch && <Button size="sm" variant="outline" icon={<Repeat size={15} />} onClick={() => nav(mode === 'admin' ? '/' : '/admin')}><span className="hidden sm:inline">{mode === 'admin' ? 'Member portal' : 'Admin'}</span></Button>}
+    <ThemeToggle />
     <button onClick={() => setPanel(true)} className="relative grid size-10 place-items-center rounded-full text-muted hover:bg-surface2 hover:text-ink" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}>
       <Bell size={21} />{unread > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-white num">{unread > 9 ? '9+' : unread}</span>}</button>
     <UserMenu />{panel && <NotificationPanel onClose={() => setPanel(false)} />}</header>;
@@ -111,7 +114,7 @@ export default function AppShell({ mode }: { mode: 'member' | 'admin' }) {
     <a href="#main" className="sr-only z-50 rounded-lg bg-brand px-4 py-2 text-on-brand focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
     <Sidebar groups={groups} collapsed={collapsed} onToggle={toggle} badges={badges} mode={mode} />
     <div className={cn('transition-[padding] duration-200', collapsed ? 'md:pl-[72px]' : 'md:pl-64')}>
-      <Topbar mode={mode} unread={badges.unread} collapsed={collapsed} onToggle={toggle} />
+      <Topbar mode={mode} unread={badges.unread} />
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 outline-none md:px-8 md:pb-12 md:pt-8"><Suspense fallback={<PageSkeleton />}><Outlet /></Suspense></main></div>
     <MobileNav groups={groups} badges={badges} /><IdleDialog /></div>;
 }
