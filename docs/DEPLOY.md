@@ -47,7 +47,8 @@ New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add
 | `No Output Directory named "public" found` | The API is functions-only, but Vercel still wants a static folder. `api/vercel.json` sets `outputDirectory: "public"` and `api/public/index.html` exists; make sure both are deployed |
 | `Server failed to start` | Missing/invalid env var (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, …) |
 | `relation "…" does not exist` | Migrations not applied to this database |
-| Browser: CORS error | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
+| Browser: CORS error + **500** on the `OPTIONS` (preflight) request | The API failed to start because of a bad environment variable (for example `CORS_ORIGIN=*`, a `JWT_SECRET` under 32 characters, or a missing `DATABASE_URL`). Open `/api/health` to read the message. Never use `*` for `CORS_ORIGIN` |
+| Browser: CORS error (preflight is 204 or 200) | `CORS_ORIGIN` doesn't exactly match the web URL (scheme + host, no trailing slash) |
 | Browser calls `/api/...` on the web domain | `VITE_API_URL` not set at **build** time; set it and redeploy |
 | 413 on upload | File over 3MB (or a very large PDF) |
 | Build fails with `tsc: command not found` | `NODE_ENV=production` makes npm skip dev dependencies at install time. `api/vercel.json` uses `npm install --include=dev` to avoid this; make sure that file is deployed |

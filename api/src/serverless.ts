@@ -30,6 +30,8 @@ export default async function handler(req: IncomingMessage & Record<string, any>
     app(req, res);
   } catch (e: any) {
     console.error('boot/handler failure', e?.message);
+    res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-headers', 'content-type, authorization'); // let the browser show this message
+    if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
     res.statusCode = 500; res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ statusCode: 500, message: 'Server failed to start. Check the deployment logs and environment variables.' }));
   }
