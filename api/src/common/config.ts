@@ -28,7 +28,7 @@ export function loadConfig(e: NodeJS.ProcessEnv = process.env): Config {
     port: int('PORT', 3000),
     databaseUrl: need('DATABASE_URL'),
     jwtSecret,
-    corsOrigins: (e.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map(s => s.trim()).filter(Boolean),
+    corsOrigins: (e.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean),
     uploadDir: e.UPLOAD_DIR ?? 'uploads',
     paystackWebhookSecret: e.PAYSTACK_WEBHOOK_SECRET || undefined,
     flutterwaveWebhookSecret: e.FLUTTERWAVE_WEBHOOK_SECRET || undefined,
