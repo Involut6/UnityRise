@@ -46,6 +46,19 @@ export class SchemeDto {
   @IsNumber() @Min(0) @Max(200) projectedRoiPct: number;
   @IsIn(['low', 'medium', 'high']) riskProfile: string;
 }
+const CATEGORIES = ['real_estate', 'treasury_bills', 'agriculture', 'equipment_leasing', 'business_financing'];
+export class UpdateSchemeDto {
+  @IsOptional() @IsString() @Length(3, 120) title?: string;
+  @IsOptional() @IsIn(CATEGORIES) category?: string;
+  @IsOptional() @IsString() @MaxLength(4000) description?: string;
+  @IsOptional() @IsNumber() @Min(1000) targetAmount?: number;
+  @IsOptional() @IsNumber() @Min(0) minAmount?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(240) durationMonths?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(200) projectedRoiPct?: number;
+  @IsOptional() @IsIn(['low', 'medium', 'high']) riskProfile?: string;
+  @IsOptional() @IsString() @Length(3, 500) reason?: string;
+}
+export class SchemeStatusDto { @IsIn(['close', 'reopen']) action: 'close' | 'reopen'; @IsOptional() @IsString() @Length(3, 500) reason?: string }
 export class MatureDto { @IsNumber() @Min(-100) @Max(500) actualReturnPct: number }
 export class AnnounceDto { @IsString() title: string; @IsString() body: string; @IsIn(['notice', 'meeting', 'agm']) kind: string }
 export class PollDto {
