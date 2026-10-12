@@ -2,7 +2,7 @@ import { Controller, Get, Injectable, Module, Param, Query, Res, BadRequestExcep
 import { Response } from 'express';
 import { Db } from '../common/db.js';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.js';
-import { savingsBalance } from '../common/ledger.js';
+import { heldForWithdrawals, money, savingsBalance } from '../common/ledger.js';
 
 const csv = (rows: any[]) => {
   if (!rows.length) return '';
@@ -21,8 +21,10 @@ export class ReportsService {
     const [inv] = await this.db.q(`select coalesce(sum(x.amount),0) invested from investment_subscriptions x join investment_schemes s on s.id=x.scheme_id where x.member_id=$1 and s.status<>'matured'`, [id]);
     const [loan] = await this.db.q(`select coalesce(sum(s.principal_due+s.penalty-s.paid),0) outstanding from loan_schedule s join loans l on l.id=s.loan_id where l.member_id=$1 and l.status='active'`, [id]);
     const [ret] = await this.db.q("select coalesce(sum(amount),0) r from transactions where member_id=$1 and type = 'investment_return'", [id]);
+    const held = await heldForWithdrawals(this.db.q, id), available = money((await savingsBalance(this.db.q, id)) - held);
     return {
-      savings: await savingsBalance(this.db.q, id), invested: Number(inv.invested), loanOutstanding: Number(loan.outstanding), returnsEarned: Number(ret.r),
+      totalWealth: money(available + held + Number(inv.invested)),
+      savings: available, heldForWithdrawal: held, invested: Number(inv.invested), loanOutstanding: Number(loan.outstanding), returnsEarned: Number(ret.r),
       upcoming: await this.db.q(`select s.due_date,s.installment_no,(s.principal_due+s.penalty-s.paid) amount from loan_schedule s join loans l on l.id=s.loan_id
         where l.member_id=$1 and l.status='active' and s.paid < s.principal_due+s.penalty order by s.due_date limit 3`, [id]),
       recent: await this.db.q('select type,amount,direction,narration,created_at from transactions where member_id=$1 order by created_at desc limit 5', [id]),
@@ -47,7 +49,7 @@ export class ReportsService {
     const recent = await this.db.q(`select t.id,t.type,t.amount,t.direction,t.created_at,m.first_name||' '||m.last_name member from transactions t join members m on m.id=t.member_id order by t.created_at desc limit 8`);
     const byProduct = await this.db.q("select product_code name, count(*)::int value from loans where status in ('active','completed') group by 1");
     return {
-      totalMembers: Number(m.total), activeMembers: Number(m.active), pendingKyc: Number(m.pending_kyc), totalSavings: Number(s.savings), totalInvestments: Number(i.invested),
+      totalMembers: Number(m.total), activeMembers: Number(m.active), pendingKyc: Number(m.pending_kyc), pendingWithdrawals: Number((await this.db.one("select count(*) n from withdrawal_requests where status='pending'")).n), totalSavings: Number(s.savings), totalInvestments: Number(i.invested),
       activeLoans: Number(l.active_loans), pendingLoans: Number(l.pending_loans), outstandingLoans: Number(o.outstanding),
       repaymentRate: Number(o.due) > 0 ? Math.round((Number(o.paid_due) / Number(o.due)) * 1000) / 10 : 100, series, recent, byProduct,
     };

@@ -19,13 +19,13 @@ export default function Dashboard() {
   const loanProgress = useMemo(() => { const s = sched.data; if (!s?.length) return null; const total = s.reduce((a, r) => a + Number(r.principal_due) + Number(r.penalty), 0); const paid = s.reduce((a, r) => a + Number(r.paid), 0); return { pct: total ? (paid / total) * 100 : 0, paid, total, next: s.find(r => Number(r.paid) < Number(r.principal_due) + Number(r.penalty)) }; }, [sched.data]);
   if (d.loading || w.loading) return <PageSkeleton />;
   if (d.error || !d.data) return <ErrorState message={d.error?.message} onRetry={d.reload} />;
-  const x = d.data, wallet = w.data ?? { balance: x.savings, pendingDeposits: 0, totalContributions: 0, returns: 0 };
+  const x = d.data, total = x.totalWealth ?? (x.savings + x.invested), wallet = w.data ?? { balance: x.savings, pendingDeposits: 0, totalContributions: 0, returns: 0 };
   const quick = [[Plus, 'Add savings', () => setPay(true)], [HandCoins, 'Apply for loan', () => nav('/loans/apply')], [TrendingUp, 'Make investment', () => nav('/investments')], [ReceiptText, 'Transactions', () => nav('/transactions')], [Download, 'Statement', () => nav('/statements')]] as const;
   return <>
     <PageHeader title={`${greeting()}, ${me?.first_name ?? 'there'}`} description={<>Membership ID <b className="text-ink">{me?.membership_id}</b> · {new Date().toLocaleDateString('en-NG', { dateStyle: 'full' })}</>} />
     <div className="grid gap-5 lg:grid-cols-3">
-      <div className="lg:col-span-2"><FinancialCard label="Total savings balance" total={naira(wallet.balance)} caption="Available to use now"
-        breakdown={[{ label: 'Available', value: naira(wallet.balance) }, { label: 'Pending deposits', value: naira(wallet.pendingDeposits), hint: 'Awaiting confirmation' }, { label: 'Total contributions', value: naira(wallet.totalContributions), hint: 'All time' }]}
+      <div className="lg:col-span-2"><FinancialCard label="Total worth" total={naira(total)} caption="Savings + live investments. Includes the returns you have earned."
+        breakdown={[{ label: 'Available savings', value: naira(x.savings), hint: x.heldForWithdrawal ? `${naira(x.heldForWithdrawal)} set aside for a withdrawal` : 'Ready to use now' }, { label: 'Invested', value: naira(x.invested), hint: 'In live schemes' }, { label: 'Returns earned', value: naira(x.returnsEarned), hint: 'Paid into your savings so far' }]}
         actions={<><Button variant="outline" className="border-transparent! bg-on-brand! text-brand! hover:opacity-90" icon={<Plus size={16} />} onClick={() => setPay(true)}>Add savings</Button>
           <Button variant="ghost" className="text-on-brand! hover:bg-on-brand/15!" onClick={() => nav('/savings')} icon={<ArrowRight size={16} />}>View wallet</Button></>} /></div>
       <Card className="flex flex-col"><CardHeader title="Outstanding obligations" />

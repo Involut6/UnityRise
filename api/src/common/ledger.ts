@@ -6,6 +6,15 @@ export async function savingsBalance(q: Q, memberId: string): Promise<number> {
   const [r] = await q('select coalesce(sum(direction*amount),0) b from transactions where member_id=$1 and affects_savings', [memberId]);
   return money(r.b);
 }
+/** Money the member has asked to withdraw that finance has not paid out yet. It is set aside so it cannot be spent twice. */
+export async function heldForWithdrawals(q: Q, memberId: string): Promise<number> {
+  const [r] = await q("select coalesce(sum(amount),0) h from withdrawal_requests where member_id=$1 and status='pending'", [memberId]);
+  return money(r.h);
+}
+/** Savings the member can use right now: the ledger balance less pending withdrawal requests. */
+export async function availableBalance(q: Q, memberId: string): Promise<number> {
+  return money((await savingsBalance(q, memberId)) - (await heldForWithdrawals(q, memberId)));
+}
 export async function notify(q: Q, memberId: string, title: string, body: string) {
   await q('insert into notifications(member_id,title,body) values($1,$2,$3)', [memberId, title, body]);
 }

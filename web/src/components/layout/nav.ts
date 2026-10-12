@@ -1,7 +1,7 @@
-import { Banknote, BarChart3, Bell, BookOpen, CircleHelp, FileText, FolderOpen, Gavel, HandCoins, LayoutDashboard, Megaphone, PiggyBank, ReceiptText, ScrollText, Settings, ShieldCheck, TrendingUp, UserCog, UserRound, Users, Vote, Wallet, type LucideIcon } from 'lucide-react';
+import { ArrowUpFromLine, Banknote, BarChart3, Bell, BookOpen, CircleHelp, FileText, FolderOpen, Gavel, HandCoins, LayoutDashboard, Megaphone, PiggyBank, ReceiptText, ScrollText, Settings, ShieldCheck, TrendingUp, UserCog, UserRound, Users, Vote, Wallet, type LucideIcon } from 'lucide-react';
 import type { Role } from '../../lib/auth';
 
-export interface NavItem { to: string; label: string; icon: LucideIcon; roles?: Role[]; end?: boolean; badgeKey?: 'pendingKyc' | 'pendingLoans' | 'unread'; primary?: boolean }
+export interface NavItem { to: string; label: string; icon: LucideIcon; roles?: Role[]; end?: boolean; badgeKey?: 'pendingKyc' | 'pendingLoans' | 'pendingWithdrawals' | 'unread'; primary?: boolean }
 export interface NavGroup { title: string; items: NavItem[] }
 
 export const MEMBER_NAV: NavGroup[] = [
@@ -23,6 +23,7 @@ export const ADMIN_NAV: NavGroup[] = [
     { to: '/admin/savings', label: 'Savings', icon: PiggyBank, roles: ['admin', 'accountant'] },
     { to: '/admin/loans', label: 'Loans', icon: HandCoins, roles: ['loan_manager', 'accountant', 'admin'], badgeKey: 'pendingLoans', primary: true },
     { to: '/admin/investments', label: 'Investments', icon: TrendingUp, roles: ['admin', 'accountant'] },
+    { to: '/admin/withdrawals', label: 'Withdrawals', icon: ArrowUpFromLine, roles: ['admin', 'accountant'], badgeKey: 'pendingWithdrawals' },
     { to: '/admin/payments', label: 'Payments', icon: Wallet, roles: ['admin', 'accountant'] },
     { to: '/admin/transactions', label: 'Transactions', icon: Banknote, roles: ['admin', 'accountant'] } ] },
   { title: 'Insights', items: [{ to: '/admin/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'accountant'], primary: true }] },
