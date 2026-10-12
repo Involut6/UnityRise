@@ -72,3 +72,11 @@ export class MeetingDto { @IsString() title: string; @IsDateString() heldAt: str
 export class MinutesDto { @IsString() minutes: string }
 
 export class ChangePasswordDto { @IsString() current: string; @IsString() @Length(8, 72) next: string }
+export class WithdrawRequestDto {
+  @IsNumber() @Min(100) @Max(100_000_000) amount: number;
+  @IsString() @MaxLength(10) bankCode: string;
+  @Matches(/^\d{10}$/, { message: 'Account number must be 10 digits' }) accountNumber: string;
+  @IsString() @Length(2, 100) accountName: string;
+  @IsOptional() @IsString() @MaxLength(300) reason?: string;
+}
+export class WithdrawReviewDto { @IsIn(['paid', 'reject']) decision: 'paid' | 'reject'; @IsOptional() @IsString() @MaxLength(300) note?: string }
