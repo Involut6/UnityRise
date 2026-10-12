@@ -43,6 +43,7 @@ const STATUS: Record<string, [Tone, ReactNode, string?]> = {
   pending: ['warning', <Clock size={13} />], submitted: ['warning', <Clock size={13} />], under_review: ['warning', <Clock size={13} />, 'Under review'], guarantors_pending: ['warning', <Clock size={13} />, 'Awaiting guarantors'],
   draft: ['neutral', <CircleDashed size={13} />], reversed: ['neutral', <Undo2 size={13} />],
   rejected: ['danger', <XCircle size={13} />], declined: ['danger', <XCircle size={13} />], failed: ['danger', <XCircle size={13} />], defaulted: ['danger', <AlertTriangle size={13} />],
+  paid: ['success', <CheckCircle2 size={13} />], cancelled: ['neutral', <XCircle size={13} />],
   credit: ['success', <Wallet size={13} />], debit: ['neutral', <Wallet size={13} />],
 };
 export const StatusBadge = ({ status }: { status: string }) => {

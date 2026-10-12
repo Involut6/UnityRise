@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, ForbiddenException, Get, Injecta
 import { Db, Q } from '../common/db.js';
 import { AuthUser, CurrentUser, Roles } from '../common/auth.js';
 import { AmountDto, MatureDto, SchemeDto, SchemeStatusDto, UpdateSchemeDto } from '../common/dto.js';
-import { money, notify, postTxn, savingsBalance } from '../common/ledger.js';
+import { availableBalance, money, notify, postTxn } from '../common/ledger.js';
 
 @Injectable()
 export class InvestmentsService {
@@ -16,7 +16,17 @@ export class InvestmentsService {
     if (!s) throw new NotFoundException();
     if (s.status !== 'draft') throw new BadRequestException('Scheme is not a draft');
     if (s.created_by === u.id && u.role !== 'super_admin') throw new ForbiddenException('A scheme must be approved by someone other than its creator');
-    return this.db.one("update investment_schemes set status='open',approved_by=$2,opened_at=now() where id=$1 returning *", [id, u.id]);
+    return this.db.tx(async q => {
+      const [o] = await q("update investment_schemes set status='open',approved_by=$2,opened_at=now() where id=$1 returning *", [id, u.id]);
+      await this.announceOpen(q, o, 'New investment opportunity');
+      return o;
+    });
+  }
+  /** Tells every approved member that a scheme is open for subscriptions. */
+  private async announceOpen(q: Q, s: any, title: string) {
+    const roi = Number(s.projected_roi_pct);
+    await q(`insert into notifications(member_id,title,body) select id,$1,$2 from members where kyc_status='approved'`,
+      [title, `${s.title} is open: ${roi}% projected return over ${s.duration_months} month${s.duration_months === 1 ? '' : 's'}, from ₦${Number(s.min_amount).toLocaleString()}. Returns are projected, not guaranteed.`]);
   }
   list(staff: boolean) {
     return this.db.q(`select s.*, coalesce(sum(x.amount),0) raised, count(x.id) subscribers from investment_schemes s
@@ -31,10 +41,12 @@ export class InvestmentsService {
       const [{ raised }] = await q('select coalesce(sum(amount),0) raised from investment_subscriptions where scheme_id=$1', [id]);
       if (Number(raised) + d.amount > Number(s.target_amount)) throw new BadRequestException('Exceeds remaining target');
       await q('select 1 from wallets where member_id=$1 for update', [u.memberId]);
-      if (d.amount > (await savingsBalance(q, u.memberId!))) throw new BadRequestException('Insufficient savings balance');
+      if (d.amount > (await availableBalance(q, u.memberId!))) throw new BadRequestException('Insufficient savings balance');
       await postTxn(q, { memberId: u.memberId!, type: 'investment_subscription', amount: d.amount, direction: -1, narration: `Subscription: ${s.title}` });
       const [sub] = await q('insert into investment_subscriptions(scheme_id,member_id,amount) values($1,$2,$3) returning *', [id, u.memberId, d.amount]);
-      if (Number(raised) + d.amount >= Number(s.target_amount)) await q("update investment_schemes set status='closed' where id=$1", [id]);
+      const full = Number(raised) + d.amount >= Number(s.target_amount);
+      if (full) await q("update investment_schemes set status='closed' where id=$1", [id]);
+      await notify(q, u.memberId!, 'Investment confirmed', `You invested ₦${d.amount.toLocaleString()} in ${s.title}. Expected maturity in ${s.duration_months} month${s.duration_months === 1 ? '' : 's'}; we will notify you when it matures.`);
       return sub;
     });
   }
@@ -132,10 +144,27 @@ export class InvestmentsService {
       const to = d.action === 'close' ? 'closed' : 'open';
       await q('update investment_schemes set status=$2 where id=$1', [id, to]);
       await this.record(q, id, u.id, { status: { from: s.status, to } }, d.reason);
+      if (to === 'closed') for (const m of await q('select distinct member_id from investment_subscriptions where scheme_id=$1', [id]))
+        await notify(q, m.member_id, 'Investment closed to new subscriptions', `${s.title} is no longer accepting new money. Your existing investment is not affected.`);
+      else await this.announceOpen(q, s, 'Investment reopened');
       return { status: to };
     });
   }
 
+  /** Daily: tell investors a scheme is due to mature within 7 days (once per scheme). */
+  async runMaturityReminders() {
+    const due = await this.db.q(`select s.id,s.title,(coalesce(s.opened_at,s.created_at) + (s.duration_months || ' months')::interval)::date as due from investment_schemes s
+      where s.status in ('open','closed') and (coalesce(s.opened_at,s.created_at) + (s.duration_months || ' months')::interval)::date between current_date and current_date + 7`);
+    let sent = 0;
+    for (const s of due) {
+      const r = await this.db.q(`insert into notifications(member_id,title,body)
+        select distinct x.member_id,'Investment maturing soon',$2 from investment_subscriptions x where x.scheme_id=$1
+          and not exists (select 1 from notifications n where n.member_id=x.member_id and n.title='Investment maturing soon' and n.body=$2) returning 1`,
+        [s.id, `${s.title} is due to mature on ${new Date(s.due).toDateString()}. You will be notified once the final return is declared and credited.`]);
+      sent += r.length;
+    }
+    return { sent };
+  }
   portfolio(u: AuthUser) {
     return this.db.q(`select x.*, s.title, s.category, s.status, s.projected_roi_pct, s.duration_months from investment_subscriptions x
       join investment_schemes s on s.id=x.scheme_id where x.member_id=$1 order by x.created_at desc`, [u.memberId]);
@@ -172,4 +201,4 @@ export class InvestmentsController {
   @Post(':id/subscribe') sub(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: AmountDto) { return this.s.subscribe(u, id, d); }
   @Roles('admin', 'accountant') @Post(':id/mature') mature(@Param('id', ParseUUIDPipe) id: string, @Body() d: MatureDto) { return this.s.mature(id, d); }
 }
-@Module({ providers: [InvestmentsService], controllers: [InvestmentsController] }) export class InvestmentsModule {}
+@Module({ providers: [InvestmentsService], controllers: [InvestmentsController], exports: [InvestmentsService] }) export class InvestmentsModule {}

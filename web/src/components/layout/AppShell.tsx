@@ -15,7 +15,7 @@ const Logo = ({ small }: { small?: boolean }) => <Link to="/" className="flex it
 
 function useBadges(isAdmin: boolean, hasMember: boolean, isStaff: boolean) {
   const ov = useApi<any>(isStaff ? '/admin/overview' : null); const nt = useApi<any[]>(hasMember ? '/notifications' : null);
-  return { pendingKyc: isAdmin ? ov.data?.pendingKyc ?? 0 : 0, pendingLoans: ov.data?.pendingLoans ?? 0, unread: nt.data?.filter(n => !n.read_at).length ?? 0 };
+  return { pendingKyc: isAdmin ? ov.data?.pendingKyc ?? 0 : 0, pendingLoans: ov.data?.pendingLoans ?? 0, pendingWithdrawals: ov.data?.pendingWithdrawals ?? 0, unread: nt.data?.filter(n => !n.read_at).length ?? 0 };
 }
 
 function visibleGroups(groups: NavGroup[], can: (...r: any[]) => boolean): NavGroup[] {

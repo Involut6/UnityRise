@@ -4,6 +4,8 @@ import { timingSafeEqual } from 'crypto';
 import { Db } from '../common/db.js';
 import { Public } from '../common/auth.js';
 import { LoansModule, LoansService } from './loans.js';
+import { SavingsModule, SavingsService } from './savings.js';
+import { InvestmentsModule, InvestmentsService } from './investments.js';
 
 /** Maps a database error to advice a person can act on. */
 function dbProblem(e: unknown): string {
@@ -20,7 +22,7 @@ const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.fr
 
 @Controller()
 export class OpsController {
-  constructor(private db: Db, private loans: LoansService) {}
+  constructor(private db: Db, private loans: LoansService, private savings: SavingsService, private investments: InvestmentsService) {}
   /**
    * Liveness + database check (use for uptime monitors and to verify a new deployment).
    * On failure it says, in words, what is wrong. It never reveals hosts, usernames or passwords.
@@ -44,7 +46,7 @@ export class OpsController {
     const secret = process.env.CRON_SECRET;
     if (!secret) throw new NotFoundException();
     if (!auth || !same(auth, `Bearer ${secret}`)) throw new UnauthorizedException();
-    return { penalties: await this.loans.runPenalties(), reminders: await this.loans.runReminders() };
+    return { penalties: await this.loans.runPenalties(), reminders: await this.loans.runReminders(), goalReminders: await this.savings.runGoalReminders(), maturityReminders: await this.investments.runMaturityReminders() };
   }
 }
-@Module({ imports: [LoansModule], controllers: [OpsController] }) export class OpsModule {}
+@Module({ imports: [LoansModule, SavingsModule, InvestmentsModule], controllers: [OpsController] }) export class OpsModule {}

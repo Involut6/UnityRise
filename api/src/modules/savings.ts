@@ -1,11 +1,13 @@
-import { Logger, BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, Post, Put, Query, Headers, RawBodyRequest, Req, UnauthorizedException, Param } from '@nestjs/common';
+import { Logger, BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, ParseUUIDPipe, Post, Put, Query, Headers, RawBodyRequest, Req, UnauthorizedException, Param } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { config } from '../common/config.js';
 import { PROVIDERS, Provider, signatureValid, toKobo } from '../common/payment-utils.js';
 import { Db } from '../common/db.js';
 import { AuthUser, CurrentUser, Public, Roles } from '../common/auth.js';
-import { AmountDto, PayInitDto, TargetDto } from '../common/dto.js';
-import { applyRepayment, money, notify, postTxn, savingsBalance } from '../common/ledger.js';
+import { PayInitDto, TargetDto, WithdrawRequestDto, WithdrawReviewDto } from '../common/dto.js';
+import { applyRepayment, availableBalance, heldForWithdrawals, money, notify, postTxn, savingsBalance } from '../common/ledger.js';
+import { Q } from '../common/db.js';
+import { bankByCode } from '../common/banks.js';
 
 @Injectable()
 export class SavingsService {
@@ -21,24 +23,111 @@ export class SavingsService {
   }
   async wallet(u: AuthUser) {
     await this.approved(u);
-    const w = await this.db.one('select monthly_target from wallets where member_id=$1', [u.memberId]);
+    const w = await this.db.one('select monthly_target, goal_due_day from wallets where member_id=$1', [u.memberId]);
     const [t] = await this.db.q(`select coalesce(sum(amount) filter (where type in ('contribution','topup')),0) contributions,
       coalesce(sum(amount) filter (where type = 'investment_return'),0) returns from transactions where member_id=$1`, [u.memberId]);
     const [p] = await this.db.q("select coalesce(sum(amount),0) pending from payments where member_id=$1 and status='pending' and purpose='topup'", [u.memberId]);
-    return { balance: await savingsBalance(this.db.q, u.memberId!), monthlyTarget: Number(w.monthly_target), totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
+    const held = await heldForWithdrawals(this.db.q, u.memberId!);
+    return { balance: money((await savingsBalance(this.db.q, u.memberId!)) - held), pendingWithdrawals: held, monthlyTarget: Number(w.monthly_target), goalDueDay: w.goal_due_day ?? null, totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
   }
-  async setTarget(u: AuthUser, d: TargetDto) { await this.approved(u); await this.db.q('update wallets set monthly_target=$2 where member_id=$1', [u.memberId, d.monthlyTarget]); return { ok: true }; }
-  async history(u: AuthUser, limit = 50) { return this.db.q('select id,type,amount,direction,affects_savings,reference,narration,created_at from transactions where member_id=$1 order by created_at desc limit $2', [this.mid(u), Math.min(limit, 500)]); }
-  async myPayments(u: AuthUser) { return this.db.q('select id,provider,reference,purpose,amount,status,created_at,settled_at from payments where member_id=$1 order by created_at desc limit 100', [this.mid(u)]); }
-  async withdraw(u: AuthUser, d: AmountDto) {
+  async setTarget(u: AuthUser, d: TargetDto) {
     await this.approved(u);
     return this.db.tx(async q => {
+      const [w] = await q('select monthly_target, goal_due_day from wallets where member_id=$1 for update', [u.memberId]);
+      const dueDay = d.dueDay === undefined ? w.goal_due_day : d.dueDay;
+      await q('update wallets set monthly_target=$2, goal_due_day=$3 where member_id=$1', [u.memberId, d.monthlyTarget, d.monthlyTarget > 0 ? dueDay : null]);
+      if (Number(w.monthly_target) !== d.monthlyTarget || (d.monthlyTarget > 0 && (w.goal_due_day ?? null) !== (dueDay ?? null))) {
+        if (d.monthlyTarget > 0) await notify(q, u.memberId!, 'Savings goal set', `Your monthly savings goal is now ₦${d.monthlyTarget.toLocaleString()}, due ${dueDay ? `by the ${dueDay}${['th', 'st', 'nd', 'rd'][(dueDay % 100 > 10 && dueDay % 100 < 14) || dueDay % 10 > 3 ? 0 : dueDay % 10]} of each month` : 'by the end of each month'}. We will remind you as the date gets close.`);
+        else await notify(q, u.memberId!, 'Savings goal removed', 'You no longer have a monthly savings goal. You can set a new one any time on the Savings page.');
+        await this.goalCheck(q, u.memberId!);
+      }
+      return { ok: true };
+    });
+  }
+  /** Sends "goal reached" once per month, the moment this month's deposits reach the member's target. */
+  private async goalCheck(q: Q, memberId: string) {
+    const [w] = await q('select monthly_target from wallets where member_id=$1', [memberId]);
+    const target = Number(w?.monthly_target ?? 0);
+    if (target <= 0) return;
+    const [m] = await q("select coalesce(sum(amount),0) v from transactions where member_id=$1 and type in ('contribution','topup') and date_trunc('month',created_at)=date_trunc('month',now())", [memberId]);
+    if (Number(m.v) < target) return;
+    const [sent] = await q("select 1 from notifications where member_id=$1 and title='Savings goal reached' and date_trunc('month',created_at)=date_trunc('month',now())", [memberId]);
+    if (!sent) await notify(q, memberId, 'Savings goal reached', `You saved ₦${Number(m.v).toLocaleString()} this month and reached your ₦${target.toLocaleString()} goal. Well done!`);
+  }
+  /**
+   * Daily: remind members who have not reached this month's goal. "Due soon" goes out 3 days before the due date
+   * (the last day of the month unless the member picked a day) and "due today" on the day. Each is sent once a month.
+   */
+  async runGoalReminders() {
+    const base = `from wallets w join members m on m.id=w.member_id
+      left join lateral (select coalesce(sum(amount),0) v from transactions x where x.member_id=w.member_id and x.type in ('contribution','topup') and date_trunc('month',x.created_at)=date_trunc('month',now())) t on true
+      cross join lateral (select (least(coalesce(w.goal_due_day, 31), extract(day from date_trunc('month',now()) + interval '1 month - 1 day')::int) + date_trunc('month',now())::date - 1) due) d
+      where w.monthly_target>0 and m.kyc_status='approved' and t.v < w.monthly_target`;
+    const left = `'₦'||(w.monthly_target-t.v)||' to go on your ₦'||w.monthly_target||' monthly goal'`;
+    const dedupe = (title: string) => `and not exists (select 1 from notifications n where n.member_id=w.member_id and n.title='${title}' and date_trunc('month',n.created_at)=date_trunc('month',now()))`;
+    const soon = await this.db.q(`insert into notifications(member_id,title,body) select w.member_id,'Savings goal due soon',${left}||'. Your goal date is '||to_char(d.due,'FMDD Mon')||' ('||(d.due-current_date)||' day'||case when d.due-current_date=1 then '' else 's' end||' away).' ${base}
+      and d.due-current_date between 1 and 3 ${dedupe('Savings goal due soon')} returning 1`);
+    const today = await this.db.q(`insert into notifications(member_id,title,body) select w.member_id,'Savings goal due today',${left}||'. Today is your goal date. Add savings now to reach it.' ${base}
+      and d.due=current_date ${dedupe('Savings goal due today')} returning 1`);
+    return { dueSoon: soon.length, dueToday: today.length };
+  }
+  async history(u: AuthUser, limit = 50) { return this.db.q('select id,type,amount,direction,affects_savings,reference,narration,created_at from transactions where member_id=$1 order by created_at desc limit $2', [this.mid(u), Math.min(limit, 500)]); }
+  async myPayments(u: AuthUser) { return this.db.q('select id,provider,reference,purpose,amount,status,created_at,settled_at from payments where member_id=$1 order by created_at desc limit 100', [this.mid(u)]); }
+  /** Member asks for money back. Nothing leaves the ledger until finance pays it out; the amount is held meanwhile. */
+  async requestWithdrawal(u: AuthUser, d: WithdrawRequestDto) {
+    await this.approved(u);
+    const bank = bankByCode(d.bankCode);
+    if (!bank) throw new BadRequestException('Choose a bank from the list');
+    return this.db.tx(async q => {
       await q('select 1 from wallets where member_id=$1 for update', [u.memberId]); // serialise per-member balance changes
-      const bal = await savingsBalance(q, u.memberId!);
+      const avail = await availableBalance(q, u.memberId!);
       const [{ held }] = await q(`select coalesce(sum(l.principal),0) held from loans l where l.member_id=$1 and l.status in ('active','approved')`, [u.memberId]);
-      if (d.amount > bal - Number(held) * 0.1) throw new BadRequestException('Insufficient withdrawable balance (10% of active loans is held as security)');
-      await postTxn(q, { memberId: u.memberId!, type: 'withdrawal', amount: d.amount, direction: -1, reference: `WD-${randomUUID()}`, narration: 'Savings withdrawal request' });
-      return { balance: await savingsBalance(q, u.memberId!) };
+      const max = Math.max(0, money(avail - Number(held) * 0.1));
+      if (d.amount > max) throw new BadRequestException(Number(held) > 0 ? `You can request up to ₦${max.toLocaleString()} (10% of active loans is held as security)` : `You can request up to ₦${max.toLocaleString()}`);
+      const [r] = await q(`insert into withdrawal_requests(member_id,amount,bank_code,bank_name,account_number,account_name,reason) values($1,$2,$3,$4,$5,$6,$7) returning *`,
+        [u.memberId, d.amount, bank.code, bank.name, d.accountNumber, d.accountName.trim(), d.reason?.trim() || null]);
+      await notify(q, u.memberId!, 'Withdrawal requested', `Your request for ₦${d.amount.toLocaleString()} to ${bank.name} •••• ${d.accountNumber.slice(-4)} is awaiting review. The amount is set aside until it is paid.`);
+      return { request: r, balance: await availableBalance(q, u.memberId!) };
+    });
+  }
+  myWithdrawals(u: AuthUser) {
+    return this.db.q('select id,amount,bank_name,account_number,account_name,reason,status,review_note,reviewed_at,created_at from withdrawal_requests where member_id=$1 order by created_at desc limit 50', [this.mid(u)]);
+  }
+  async cancelWithdrawal(u: AuthUser, id: string) {
+    return this.db.tx(async q => {
+      const [r] = await q("update withdrawal_requests set status='cancelled' where id=$1 and member_id=$2 and status='pending' returning *", [id, this.mid(u)]);
+      if (!r) throw new BadRequestException('Only a pending request can be cancelled');
+      await notify(q, r.member_id, 'Withdrawal cancelled', `Your request for ₦${Number(r.amount).toLocaleString()} was cancelled and the money is back in your available balance.`);
+      return { ok: true };
+    });
+  }
+  /** Finance view: every request with the member and bank details needed to pay it. */
+  adminWithdrawals(status?: string) {
+    return this.db.q(`select w.id,w.amount,w.bank_name,w.account_number,w.account_name,w.reason,w.status,w.review_note,w.reviewed_at,w.created_at,w.reference,
+        m.first_name||' '||m.last_name member,m.membership_id from withdrawal_requests w join members m on m.id=w.member_id
+        ${status ? 'where w.status=$1' : ''} order by (w.status='pending') desc, w.created_at desc limit 300`, status ? [status] : []);
+  }
+  /** Staff marks a request as paid (posting the ledger entry) or rejects it with a note. */
+  async reviewWithdrawal(u: AuthUser, id: string, d: WithdrawReviewDto) {
+    if (d.decision === 'reject' && !d.note?.trim()) throw new BadRequestException('Tell the member why the request was rejected');
+    return this.db.tx(async q => {
+      const [r0] = await q('select member_id from withdrawal_requests where id=$1', [id]);
+      if (!r0) throw new NotFoundException();
+      await q('select 1 from wallets where member_id=$1 for update', [r0.member_id]);
+      const [r] = await q('select * from withdrawal_requests where id=$1 for update', [id]);
+      if (r.status !== 'pending') throw new BadRequestException(`This request is already ${r.status}`);
+      const amount = Number(r.amount);
+      if (d.decision === 'paid') {
+        if ((await savingsBalance(q, r.member_id)) < amount) throw new BadRequestException('The member no longer has enough savings to pay this out');
+        const reference = `WD-${randomUUID()}`;
+        await postTxn(q, { memberId: r.member_id, type: 'withdrawal', amount, direction: -1, reference, narration: `Withdrawal to ${r.bank_name} •••• ${String(r.account_number).slice(-4)}` });
+        await q("update withdrawal_requests set status='paid',reviewed_by=$2,reviewed_at=now(),review_note=$3,reference=$4 where id=$1", [id, u.id, d.note?.trim() || null, reference]);
+        await notify(q, r.member_id, 'Withdrawal paid', `₦${amount.toLocaleString()} has been sent to ${r.bank_name} •••• ${String(r.account_number).slice(-4)}.`);
+      } else {
+        await q("update withdrawal_requests set status='rejected',reviewed_by=$2,reviewed_at=now(),review_note=$3 where id=$1", [id, u.id, d.note!.trim()]);
+        await notify(q, r.member_id, 'Withdrawal not approved', `Your request for ₦${amount.toLocaleString()} was not approved: ${d.note!.trim()} The money is back in your available balance.`);
+      }
+      return { status: d.decision === 'paid' ? 'paid' : 'rejected' };
     });
   }
   // ---- payments (gateway adapters are stubbed: swap initiate() for the Paystack/Flutterwave SDK once keys exist) ----
@@ -75,6 +164,7 @@ export class SavingsService {
         await applyRepayment(q, p.purpose_ref, amount);
       }
       await notify(q, p.member_id, 'Payment received', `₦${amount.toLocaleString()} received (${ref}).`);
+      if (p.purpose === 'topup') await this.goalCheck(q, p.member_id);
       return { status: 'success' };
     });
   }
@@ -91,7 +181,11 @@ export class SavingsController {
   @Put('savings/target') target(@CurrentUser() u: AuthUser, @Body() d: TargetDto) { return this.s.setTarget(u, d); }
   @Get('savings/transactions') tx(@CurrentUser() u: AuthUser, @Query('limit') l?: string) { return this.s.history(u, Number(l) || 50); }
   @Get('payments/mine') pays(@CurrentUser() u: AuthUser) { return this.s.myPayments(u); }
-  @Post('savings/withdraw') wd(@CurrentUser() u: AuthUser, @Body() d: AmountDto) { return this.s.withdraw(u, d); }
+  @Post('savings/withdrawals') wd(@CurrentUser() u: AuthUser, @Body() d: WithdrawRequestDto) { return this.s.requestWithdrawal(u, d); }
+  @Get('savings/withdrawals') wds(@CurrentUser() u: AuthUser) { return this.s.myWithdrawals(u); }
+  @Post('savings/withdrawals/:id/cancel') wdc(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.s.cancelWithdrawal(u, id); }
+  @Roles('admin', 'accountant') @Get('admin/withdrawals') awd(@Query('status') st?: string) { return this.s.adminWithdrawals(['pending', 'paid', 'rejected', 'cancelled'].includes(st ?? '') ? st : undefined); }
+  @Roles('admin', 'accountant') @Post('admin/withdrawals/:id/review') awr(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() d: WithdrawReviewDto) { return this.s.reviewWithdrawal(u, id, d); }
   @Post('payments/initiate') init(@CurrentUser() u: AuthUser, @Body() d: PayInitDto) { return this.s.initiate(u, d); }
   /** Dev-only helper so the flow is testable without live gateway credentials. Members can only settle their own payments. */
   @Post('payments/:ref/simulate') sim(@Param('ref') ref: string, @CurrentUser() u: AuthUser) {
