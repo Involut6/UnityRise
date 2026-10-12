@@ -21,7 +21,7 @@ export class KycDocDto {
 }
 export class ReviewDto { @IsIn(['approve', 'reject']) decision: 'approve' | 'reject'; @IsOptional() @IsString() note?: string }
 export class AmountDto { @IsNumber() @Min(100) @Max(100_000_000) amount: number }
-export class TargetDto { @IsNumber() @Min(0) monthlyTarget: number }
+export class TargetDto { @IsNumber() @Min(0) monthlyTarget: number; @IsOptional() @IsInt() @Min(1) @Max(28) dueDay?: number | null }
 export class PayInitDto {
   @IsIn(['paystack', 'flutterwave']) provider: string;
   @IsIn(['topup', 'loan_repayment']) purpose: string;

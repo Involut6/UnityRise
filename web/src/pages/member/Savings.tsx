@@ -29,13 +29,14 @@ export default function Savings() {
   const [runCancel] = useAction(() => { invalidate(); wds.reload(); });
   const openWd = () => { setWAmt(''); setWhy(''); setAcctName(n => n || `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim()); setWd(true); };
   const wdReady = typeof wAmt === 'number' && wAmt >= 100 && !!bank && /^\d{10}$/.test(acct) && acctName.trim().length >= 2;
-  const [runGoal, busyGoal] = useAction(() => { invalidate(); setGoal(false); }); const [gAmt, setGAmt] = useState<number | ''>('');
+  const [runGoal, busyGoal] = useAction(() => { invalidate(); setGoal(false); }); const [gAmt, setGAmt] = useState<number | ''>(''); const [gDay, setGDay] = useState('');
   if (w.loading) return <PageSkeleton />;
   if (w.error || !w.data) return <ErrorState message={w.error?.message} onRetry={w.reload} />;
   const s = w.data; const thisMonth = new Date().toISOString().slice(0, 7);
   const monthTotal = ledger.filter(r => ['contribution', 'topup'].includes(r.type) && r.created_at.slice(0, 7) === thisMonth).reduce((a, r) => a + Number(r.amount), 0);
   const goalPct = s.monthlyTarget ? (monthTotal / s.monthlyTarget) * 100 : 0;
-  const nextDue = (() => { const d = new Date(); d.setMonth(d.getMonth() + (monthTotal >= s.monthlyTarget ? 1 : 0), 1); return d; })();
+  const nextDue = (() => { const n = new Date(); const at = (m: number) => new Date(n.getFullYear(), m, s.goalDueDay ?? new Date(n.getFullYear(), m + 1, 0).getDate()); return monthTotal >= s.monthlyTarget ? at(n.getMonth() + 1) : at(n.getMonth()); })();
+  const ord = (n: number) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10 > 3 ? 0 : n % 10]}`;
   const close = () => { setPay(false); if (sp.get('add')) setSp({}, { replace: true }); tx.reload(); w.reload(); };
   const doWithdraw = async () => {
     if (!wdReady || typeof wAmt !== 'number') return;
@@ -50,11 +51,11 @@ export default function Savings() {
       breakdown={[{ label: 'Available balance', value: naira(s.balance) }, { label: 'Pending deposits', value: naira(s.pendingDeposits), hint: 'Not yet in your balance' }, { label: 'Awaiting withdrawal', value: naira(s.pendingWithdrawals), hint: 'Set aside until paid out' }]} />
     <div className="mt-5 grid gap-4 sm:grid-cols-2"><StatCard icon={<PiggyBank size={20} />} sensitive label="Total contributions" value={naira(s.totalContributions)} hint="Everything you have paid in" />
       <StatCard icon={<Sparkles size={20} />} tone="success" sensitive label="Investment returns" value={naira(s.returns)} hint="Confirmed payouts credited to savings" /></div>
-    <div className="mt-5 grid gap-5 lg:grid-cols-3"><Card className="h-fit lg:col-span-1"><CardHeader title="Monthly savings goal" action={<Button size="sm" variant="outline" icon={<Target size={15} />} onClick={() => { setGAmt(s.monthlyTarget || ''); setGoal(true); }}>{s.monthlyTarget ? 'Edit' : 'Set goal'}</Button>} />
+    <div className="mt-5 grid gap-5 lg:grid-cols-3"><Card className="h-fit lg:col-span-1"><CardHeader title="Monthly savings goal" action={<Button size="sm" variant="outline" icon={<Target size={15} />} onClick={() => { setGAmt(s.monthlyTarget || ''); setGDay(s.goalDueDay ? String(s.goalDueDay) : ''); setGoal(true); }}>{s.monthlyTarget ? 'Edit' : 'Set goal'}</Button>} />
       {s.monthlyTarget ? <><p className="num text-2xl font-bold">{naira(monthTotal)}<span className="text-base font-medium text-muted"> / {naira(s.monthlyTarget, { decimals: false })}</span></p>
         <div className="mt-3"><ProgressBar value={goalPct} label="Monthly contribution progress" tone={goalPct >= 100 ? 'success' : 'brand'} /></div>
         <p className="mt-3 text-sm text-muted">{goalPct >= 100 ? 'Goal reached this month. Well done!' : `${naira(s.monthlyTarget - monthTotal)} to go this month.`}</p>
-        <div className="mt-4 rounded-xl bg-surface2 p-3 text-sm"><p className="text-muted">Next contribution due</p><p className="font-semibold">{date(nextDue)}</p></div></>
+        <div className="mt-4 rounded-xl bg-surface2 p-3 text-sm"><p className="text-muted">Goal date{goalPct >= 100 ? ' (next month)' : ''}</p><p className="font-semibold">{date(nextDue)}</p><p className="text-xs text-muted">We remind you 3 days before and on the day.</p></div></>
         : <p className="text-sm text-muted">Set a monthly goal to track your progress and see when your next contribution is due.</p>}</Card>
       <div className="lg:col-span-2"><ChartCard sensitive title="Balance over time" subtitle="Last 12 months" empty={!ledger.length} chart={{ kind: 'area', data: bal, x: 'month', series: [{ key: 'balance', label: 'Balance' }], money: true }} /></div></div>
     <div className="mt-5"><ChartCard sensitive title="Contributions" subtitle="Deposits per month, last 6 months" height={200} empty={!contrib.some(c => c.contributions)} chart={{ kind: 'bars', data: contrib, x: 'month', series: [{ key: 'contributions', label: 'Contributions' }], money: true }} /></div>
@@ -77,8 +78,9 @@ export default function Savings() {
         <FormField label="Account number" required hint="10-digit NUBAN" error={acct && !/^\d{10}$/.test(acct) ? 'Enter the 10-digit account number' : undefined}><Input inputMode="numeric" maxLength={10} autoComplete="off" value={acct} onChange={e => setAcct(e.target.value.replace(/\D/g, ''))} placeholder="0123456789" /></FormField>
         <FormField label="Account name" required hint="Must match the name on the account."><Input autoComplete="off" value={acctName} onChange={e => setAcctName(e.target.value)} /></FormField>
         <FormField label="Reason" hint="Optional"><Textarea value={why} maxLength={300} onChange={e => setWhy(e.target.value)} placeholder="Why are you withdrawing? (optional)" /></FormField></div></Modal>}
-    {goal && <Modal size="sm" title="Monthly savings goal" onClose={() => setGoal(false)} footer={<><Button variant="outline" onClick={() => setGoal(false)}>Cancel</Button><Button loading={busyGoal} disabled={gAmt === ''} onClick={() => runGoal(() => api('PUT', '/savings/target', { monthlyTarget: gAmt }), 'Goal saved')}>Save goal</Button></>}>
+    {goal && <Modal size="sm" title="Monthly savings goal" onClose={() => setGoal(false)} footer={<><Button variant="outline" onClick={() => setGoal(false)}>Cancel</Button><Button loading={busyGoal} disabled={gAmt === ''} onClick={() => runGoal(() => api('PUT', '/savings/target', { monthlyTarget: gAmt, dueDay: gDay ? Number(gDay) : null }), 'Goal saved')}>Save goal</Button></>}>
       <FormField label="How much do you want to save each month?" hint="This is a personal target, not an automatic deduction."><MoneyInput value={gAmt} onChange={setGAmt} autoFocus /></FormField>
+      <div className="mt-4"><FormField label="Reach it by" hint="You get a reminder 3 days before this date and again on the day."><Select value={gDay} onChange={e => setGDay(e.target.value)}><option value="">End of the month</option>{Array.from({ length: 28 }, (_, i) => i + 1).map(n => <option key={n} value={String(n)}>The {ord(n)} of each month</option>)}</Select></FormField></div>
       <Alert tone="info">Automatic monthly deductions need a direct-debit mandate, which your cooperative office can set up.</Alert></Modal>}
   </>;
 }

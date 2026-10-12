@@ -23,20 +23,21 @@ export class SavingsService {
   }
   async wallet(u: AuthUser) {
     await this.approved(u);
-    const w = await this.db.one('select monthly_target from wallets where member_id=$1', [u.memberId]);
+    const w = await this.db.one('select monthly_target, goal_due_day from wallets where member_id=$1', [u.memberId]);
     const [t] = await this.db.q(`select coalesce(sum(amount) filter (where type in ('contribution','topup')),0) contributions,
       coalesce(sum(amount) filter (where type = 'investment_return'),0) returns from transactions where member_id=$1`, [u.memberId]);
     const [p] = await this.db.q("select coalesce(sum(amount),0) pending from payments where member_id=$1 and status='pending' and purpose='topup'", [u.memberId]);
     const held = await heldForWithdrawals(this.db.q, u.memberId!);
-    return { balance: money((await savingsBalance(this.db.q, u.memberId!)) - held), pendingWithdrawals: held, monthlyTarget: Number(w.monthly_target), totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
+    return { balance: money((await savingsBalance(this.db.q, u.memberId!)) - held), pendingWithdrawals: held, monthlyTarget: Number(w.monthly_target), goalDueDay: w.goal_due_day ?? null, totalContributions: Number(t.contributions), returns: Number(t.returns), pendingDeposits: Number(p.pending) };
   }
   async setTarget(u: AuthUser, d: TargetDto) {
     await this.approved(u);
     return this.db.tx(async q => {
-      const [w] = await q('select monthly_target from wallets where member_id=$1 for update', [u.memberId]);
-      await q('update wallets set monthly_target=$2 where member_id=$1', [u.memberId, d.monthlyTarget]);
-      if (Number(w.monthly_target) !== d.monthlyTarget) {
-        if (d.monthlyTarget > 0) await notify(q, u.memberId!, 'Savings goal set', `Your monthly savings goal is now ₦${d.monthlyTarget.toLocaleString()}. We will let you know when you reach it.`);
+      const [w] = await q('select monthly_target, goal_due_day from wallets where member_id=$1 for update', [u.memberId]);
+      const dueDay = d.dueDay === undefined ? w.goal_due_day : d.dueDay;
+      await q('update wallets set monthly_target=$2, goal_due_day=$3 where member_id=$1', [u.memberId, d.monthlyTarget, d.monthlyTarget > 0 ? dueDay : null]);
+      if (Number(w.monthly_target) !== d.monthlyTarget || (d.monthlyTarget > 0 && (w.goal_due_day ?? null) !== (dueDay ?? null))) {
+        if (d.monthlyTarget > 0) await notify(q, u.memberId!, 'Savings goal set', `Your monthly savings goal is now ₦${d.monthlyTarget.toLocaleString()}, due ${dueDay ? `by the ${dueDay}${['th', 'st', 'nd', 'rd'][(dueDay % 100 > 10 && dueDay % 100 < 14) || dueDay % 10 > 3 ? 0 : dueDay % 10]} of each month` : 'by the end of each month'}. We will remind you as the date gets close.`);
         else await notify(q, u.memberId!, 'Savings goal removed', 'You no longer have a monthly savings goal. You can set a new one any time on the Savings page.');
         await this.goalCheck(q, u.memberId!);
       }
@@ -53,16 +54,22 @@ export class SavingsService {
     const [sent] = await q("select 1 from notifications where member_id=$1 and title='Savings goal reached' and date_trunc('month',created_at)=date_trunc('month',now())", [memberId]);
     if (!sent) await notify(q, memberId, 'Savings goal reached', `You saved ₦${Number(m.v).toLocaleString()} this month and reached your ₦${target.toLocaleString()} goal. Well done!`);
   }
-  /** Daily, from the 25th: nudge members who have a goal they have not reached yet (once a month). */
+  /**
+   * Daily: remind members who have not reached this month's goal. "Due soon" goes out 3 days before the due date
+   * (the last day of the month unless the member picked a day) and "due today" on the day. Each is sent once a month.
+   */
   async runGoalReminders() {
-    const r = await this.db.q(`insert into notifications(member_id,title,body)
-      select w.member_id,'Savings goal reminder','You have saved ₦'||coalesce(t.v,0)||' of your ₦'||w.monthly_target||' goal this month. Add ₦'||(w.monthly_target-coalesce(t.v,0))||' before month end to reach it.'
-      from wallets w join members m on m.id=w.member_id
-      left join lateral (select sum(amount) v from transactions x where x.member_id=w.member_id and x.type in ('contribution','topup') and date_trunc('month',x.created_at)=date_trunc('month',now())) t on true
-      where w.monthly_target>0 and m.kyc_status='approved' and extract(day from now())>=25 and coalesce(t.v,0) < w.monthly_target
-        and not exists (select 1 from notifications n where n.member_id=w.member_id and n.title in ('Savings goal reminder','Savings goal reached') and date_trunc('month',n.created_at)=date_trunc('month',now()))
-      returning 1`);
-    return { sent: r.length };
+    const base = `from wallets w join members m on m.id=w.member_id
+      left join lateral (select coalesce(sum(amount),0) v from transactions x where x.member_id=w.member_id and x.type in ('contribution','topup') and date_trunc('month',x.created_at)=date_trunc('month',now())) t on true
+      cross join lateral (select (least(coalesce(w.goal_due_day, 31), extract(day from date_trunc('month',now()) + interval '1 month - 1 day')::int) + date_trunc('month',now())::date - 1) due) d
+      where w.monthly_target>0 and m.kyc_status='approved' and t.v < w.monthly_target`;
+    const left = `'₦'||(w.monthly_target-t.v)||' to go on your ₦'||w.monthly_target||' monthly goal'`;
+    const dedupe = (title: string) => `and not exists (select 1 from notifications n where n.member_id=w.member_id and n.title='${title}' and date_trunc('month',n.created_at)=date_trunc('month',now()))`;
+    const soon = await this.db.q(`insert into notifications(member_id,title,body) select w.member_id,'Savings goal due soon',${left}||'. Your goal date is '||to_char(d.due,'FMDD Mon')||' ('||(d.due-current_date)||' day'||case when d.due-current_date=1 then '' else 's' end||' away).' ${base}
+      and d.due-current_date between 1 and 3 ${dedupe('Savings goal due soon')} returning 1`);
+    const today = await this.db.q(`insert into notifications(member_id,title,body) select w.member_id,'Savings goal due today',${left}||'. Today is your goal date. Add savings now to reach it.' ${base}
+      and d.due=current_date ${dedupe('Savings goal due today')} returning 1`);
+    return { dueSoon: soon.length, dueToday: today.length };
   }
   async history(u: AuthUser, limit = 50) { return this.db.q('select id,type,amount,direction,affects_savings,reference,narration,created_at from transactions where member_id=$1 order by created_at desc limit $2', [this.mid(u), Math.min(limit, 500)]); }
   async myPayments(u: AuthUser) { return this.db.q('select id,provider,reference,purpose,amount,status,created_at,settled_at from payments where member_id=$1 order by created_at desc limit 100', [this.mid(u)]); }

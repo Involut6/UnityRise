@@ -53,7 +53,7 @@ Deploying on Vercel: see `docs/DEPLOY.md`.
 
 - **Dashboard** shows *Total worth* = available savings + live investments (returns are paid into savings on maturity, so they are already counted; they are shown as their own line, not added twice).
 - **Withdrawals are requests.** A member picks a bank, enters account number/name and an optional reason. The amount is set aside immediately (cannot be spent or invested twice) and the savings ledger is debited only when accountant/admin/super admin marks it paid on *Admin → Withdrawals*. Rejections need a note; members can cancel while pending.
-- **Notifications**: savings goal set / reached (once a month) / reminder from the 25th; new investment opened or reopened (all verified members), investment confirmed, terms changed, closed, maturing within 7 days, matured; withdrawal requested / paid / rejected / cancelled. The daily cron (`/api/cron/daily`) sends the reminders.
+- **Notifications**: savings goal set / reached (once a month) / "due soon" 3 days before the goal date and "due today" on it (members pick a day 1–28, default month end); new investment opened or reopened (all verified members), investment confirmed, terms changed, closed, maturing within 7 days, matured; withdrawal requested / paid / rejected / cancelled. The daily cron (`/api/cron/daily`) sends the reminders.
 
 ## Investment management (super admin)
 - `/admin/investments/:id` is the detailed scheme page (overview, investors, projected vs confirmed returns, lifecycle and change history). Admins and accountants can view it; **only the super admin can edit** (`PATCH /api/investments/:id`, `POST /api/investments/:id/status`).

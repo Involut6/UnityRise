@@ -26,7 +26,7 @@ Environment variables (Production):
 | `PAYSTACK_WEBHOOK_SECRET`, `FLUTTERWAVE_WEBHOOK_SECRET` | when you add live gateways |
 | `NODE_ENV` | `production` |
 
-Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,"database":"connected","migrations":7,…}`. If not, it says in words what is wrong (wrong database login, host not found, tables missing, …). A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
+Check it: open `https://<your-api>.vercel.app/api/health`. You should see `{"ok":true,"database":"connected","migrations":8,…}`. If not, it says in words what is wrong (wrong database login, host not found, tables missing, …). A 500 there with "Server failed to start" means a missing or invalid environment variable. Check **Deployments → Functions → Logs**.
 
 ## 2. Web project
 New Project → same repo → **Root Directory: `web`** → Framework: Vite. Add one variable:
